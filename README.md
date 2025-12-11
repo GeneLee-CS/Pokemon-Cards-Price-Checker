@@ -1,6 +1,5 @@
 # Pokémon Card Price Tracker
 An end-to-end **data engineering** project that collects, processes, stores, and visualizes historical Pokémon card sale prices from eBay.  
-Project aims to demonstrate real-world skills in **data ingestion, pipelines, cloud storage, data warehousing, analytics engineering, and API + dashboard development**.
 
 ---
 
@@ -13,5 +12,6 @@ Project aims to demonstrate real-world skills in **data ingestion, pipelines, cl
 
 ## Current Status
 - Project scaffolding complete
-- Preparing first TCGPlayer API ingestion
+- TCGPlayer API ingestion complete
+- Working on TCG data backfill
 
