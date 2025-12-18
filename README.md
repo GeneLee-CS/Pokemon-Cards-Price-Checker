@@ -14,12 +14,17 @@ An end-to-end **data engineering** project that collects, processes, stores, and
 
 1. **Ingestion Layer (base dataset)**
     - Description: Pulls full pokemon card dataset from TCG Player's API
-    - Tools: Python, Requests
-    - Output: Raw JSON saved to '/data/raw'
+
+    - **Design Note**:
+        - The TCG Player API is relatively slow and can be unreliable for full-dataset pulls (timeouts, rate limits)
+        - To avoid unnecessary re-fetching and to improve reliability, the API ingestion step is decoupled from the S3 upload step.
+        - API pulls are persisted locally before uploading to S3.
+        - Intend to avoid full dataset pulls unless neccessary, only delta updates moving forward. 
 
 
 ## Current Status
 - Project scaffolding complete
 - TCGPlayer API ingestion complete
-- Working on TCG data backfill
+- TCG data backfill complete (full dateset acquired)
+- S3 set up complete
 
