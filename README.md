@@ -21,6 +21,18 @@ An end-to-end **data engineering** project that collects, processes, stores, and
         - API pulls are persisted locally before uploading to S3.
         - Intend to avoid full dataset pulls unless neccessary, only delta updates moving forward. 
 
+2. **Raw Data Layer (S3)**
+    - Description: Stores unmodified TCG Player API responses in Amazon S3.
+    - Data stored in JSON format and partitioned by process and ingestion date.
+
+    - **Data Lake Zones**:
+        - **Raw**: Immutable JSON data ingested directly from source API.
+        - **Staging**: Cleaned, normalized, typed datasets (Parquet).
+        - **Processed**: Analytics-ready tables for downstream consumption.
+
+3. **Staging / Processing Layer**
+    - Description: Transforms raw JSON data into structured Parquet datasets.
+    - Handles schema normalization, type casting and basic data quality checks.
 
 ## Current Status
 - Project scaffolding complete
