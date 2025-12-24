@@ -12,6 +12,11 @@ An end-to-end **data engineering** project that collects, processes, stores, and
 
 ## Architecture
 
+### Data Lake Zones:
+    - **Raw**: Immutable JSON data ingested directly from source API.
+    - **Staging**: Cleaned, normalized, typed datasets (Parquet). Schema definitions are maintained in top-level 'schema/' directory.
+    - **Processed**: Analytics-ready tables for downstream consumption.
+
 1. **Ingestion Layer (base dataset)**
     - Description: Pulls full pokemon card dataset from TCG Player's API
 
@@ -24,11 +29,6 @@ An end-to-end **data engineering** project that collects, processes, stores, and
 2. **Raw Data Layer (S3)**
     - Description: Stores unmodified TCG Player API responses in Amazon S3.
     - Data stored in JSON format and partitioned by process and ingestion date.
-
-    - **Data Lake Zones**:
-        - **Raw**: Immutable JSON data ingested directly from source API.
-        - **Staging**: Cleaned, normalized, typed datasets (Parquet).
-        - **Processed**: Analytics-ready tables for downstream consumption.
 
 3. **Staging / Processing Layer**
     - Description: Transforms raw JSON data into structured Parquet datasets.
