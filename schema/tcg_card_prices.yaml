@@ -1,0 +1,32 @@
+table: tcg_card_prices
+description: >
+  Normalized pricing data for Pokémon cards on TCG's site.
+  One row per card per price type per ingestion date.
+
+columns:
+  card_id:
+    type: string
+    nullable: false
+    description: Foreign key to tcg_cards.card_id
+
+  price_type:
+    type: string
+    nullable: false
+    description: Price types (normal, holofoil, reverseHolofoil, 1stEditionHolofoil and 1stEditionNormal)
+
+  market:
+    type: decimal
+    nullable: false
+    description: Market value of card based on TCG. Usually best representation of current market price on TCG
+
+  tcg_update_date:
+    type: date
+    nullable: false
+    description: Date the price was last updated on TCG. YYYY/MM/DD
+
+  ingestion_date:
+    type: date
+    nullable: false
+    description: Date the pricing snapshot was ingested
+
+  

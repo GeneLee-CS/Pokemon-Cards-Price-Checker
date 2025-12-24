@@ -1,0 +1,55 @@
+table: tcg_cards
+description: >
+  Base TCG Player Pokemon Card catalog. One row per unique card.
+
+columns:
+  card_id:
+    type: string
+    nullable: false
+    description: Unique TCG Player Pokemon card identifier
+
+  name:
+    type: string
+    nullable: false
+    description: Card name
+
+  supertype:
+    type: string
+    nullable: false
+    description: Card supertype (e.g. Pokémon, Energy, or Trainer)
+
+  set_printedTotal:
+    type: integer
+    nullable: false
+    description: Number printed on the card the represents the total. This total does not include secret rares
+
+  number:
+    type: integer
+    nullable: false
+    description: Number of card in the set. Cards are often identified in the format (number/set_printedTotal)
+
+  rarity:
+    type: string
+    nullable: true
+    description: Card rarity (e.g. "Common" or "Rare Rainbow")
+
+  set_id:
+    type: string
+    nullable: false
+    description: Unique TCG identifier for each Pokemon set
+  
+  set_name:
+    type: string
+    nullable: false
+    description: Name of the set
+
+  set_releaseDate:
+    type: date
+    nullable: true
+    description: set release date in the US. YYYY/MM/DD
+
+  ingestion_date:
+    type: date
+    nullable: false
+    description: Date the record was intgested into the data lake
+  
