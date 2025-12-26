@@ -12,7 +12,7 @@ An end-to-end **data engineering** project that collects, processes, stores, and
 
 ## Architecture
 
-### Data Lake Zones:
+**Data Lake Zones**:
     - **Raw**: Immutable JSON data ingested directly from source API.
     - **Staging**: Cleaned, normalized, typed datasets (Parquet). Schema definitions are maintained in top-level 'schema/' directory.
     - **Processed**: Analytics-ready tables for downstream consumption.
