@@ -20,6 +20,5 @@ data/
 
 # testing_script
 scripts/
-*.py
 
 
