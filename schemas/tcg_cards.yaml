@@ -24,7 +24,7 @@ columns:
     description: Number printed on the card the represents the total. This total does not include secret rares
 
   number:
-    type: integer
+    type: string
     nullable: false
     description: Number of card in the set. Cards are often identified in the format (number/set_printedTotal)
 
