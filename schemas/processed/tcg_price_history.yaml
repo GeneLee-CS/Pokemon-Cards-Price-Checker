@@ -1,0 +1,35 @@
+table: tcg_price_history
+description: >
+  Table tracking TCG's market price history over time.
+  Each record contains a card_id, price_variant_id combination, the TCG market price and date the price was recorded.
+
+columns:
+  card_id:
+    type: string
+    nullable: false
+    description: Unique card identifier. Foreign key to card_master.card_id.
+
+  price_variant_id:
+    type: string
+    nullable: false
+    description: Unique price variant identifier for a card (eg. holofoil, reverseHolofoil). Foreign key to card_price_variant_master.price_variant_id
+
+  price_date:
+    type: date
+    nullable: false
+    description: Date the price was valid for. Sourced from tcg_card_prices.tcg_update_date.
+
+  market_price:
+    type: decimal(10,2)
+    nullable: false
+    description: Market price as reported by TCG's API for the given (card,price variant) on the specified date.
+
+  ingestion_date:
+    type: date
+    nullable: false
+    description: Date the pricing record was ingested into the data lake. Should be the same as tcg_card_prices.ingestion_date
+
+  created_at:
+    type: timestamp
+    nullable: false
+    description: Timestamp of when the record was first written.
