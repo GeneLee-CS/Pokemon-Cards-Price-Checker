@@ -1,0 +1,61 @@
+table: card_master
+
+description: >
+  Master table defining Pokémon Cards independent of pricing or data source. 
+  Serves as the central join point for all downstream pricing, analytics, and external data sources.
+
+columns:
+  card_id:
+    type: string
+    nullable: false
+    description: Unique internal Pokémon card identifier (same as TCG card identifiers for now)
+
+  card_name:
+    type: string
+    nullable: false
+    description: Official Pokémon card name
+
+  set_id:
+    type: string
+    nullable: false
+    description: Internal identifier of the Pokémon card set (same as TCG set identifiers for now)
+
+  set_name:
+    type: string
+    nullable: false
+    description: Name of the Pokémon card set
+
+  set_printedTotal:
+    type: integer
+    nullable: false
+    description: Number printed on the card the represents the total. This total does not include secret rares
+
+  number:
+    type: string
+    nullable: false
+    description: Number of card in the set. Cards are often identified in the format number/set_printedTotal (e.g., 190/165 for secret rares)
+
+  rarity:
+    type: string
+    nullable: true
+    description: Card rarity classification
+
+  supertype:
+    type: string
+    nullable: true
+    description: High-level card type (Pokémon, Trainer, Energy)
+
+  release_date:
+    type: date
+    nullable: true
+    description: Official release date of the card set
+
+  created_at:
+    type: timestamp
+    nullable: false
+    description: Timestamp when the card record was created
+
+  updated_at:
+    type: timestamp
+    nullable: false
+    description: Timestamp when the card record was last updated
