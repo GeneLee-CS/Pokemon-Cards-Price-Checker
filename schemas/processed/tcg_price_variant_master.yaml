@@ -1,0 +1,40 @@
+table: tcg_price_variant_master
+description: >
+  Master table defining distinct TCG price variants. Each row represents a unique (tcg.card_id, price_type) combination.
+  Each row is treated as an independent pricing entity for ranking and eBay tracking.
+
+columns:
+  price_variant_id:
+    type: string
+    nullable: false
+    description: Deterministic identifier generated from card_id and price_type.
+
+  card_id:
+    type: string
+    nullable: false
+    description: Pokémon TCG card identifier from the tcg_cards staging table.
+
+  price_type:
+    type: string
+    nullable: false
+    description: TCG price variant type (normal, holofoil, reverseHolofoil, 1stEditionHolofoil and 1stEditionNormal)
+
+  first_seen_date:
+    type: date
+    nullable: false
+    description: Date when this price variant was first observed in tcg_card_prices.
+
+  active_flag:
+    type: boolean
+    nullable: false
+    description: Indicates whether this price variant is currently active and eligible for downstream tracking.
+
+  created_at:
+    type: timestamp
+    nullable: false
+    description: Timestamp when this record was created.
+
+  updated_at:
+    type: timestamp
+    nullable: false
+    description: Timestamp when this record was last updated.
