@@ -1,3 +1,13 @@
+"""
+TCG API ingestion Script
+
+Purpose:
+- Queries TCG's API for full catalog data
+- Outputs raw JSON file and file for missing pages due to API errors
+- Write outputs to S3 / local raw layer in JSON format
+"""
+
+
 import os
 import requests
 from dotenv import load_dotenv

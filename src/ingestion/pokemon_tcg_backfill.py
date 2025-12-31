@@ -1,3 +1,12 @@
+"""
+TCG API backfill ingestion Script
+
+Purpose:
+- Queries TCG's API for missing catalog data due to errors by using the failed pages JSON
+- Write outputs to S3 / local raw layer in JSON format
+"""
+
+
 import os
 import requests
 from dotenv import load_dotenv

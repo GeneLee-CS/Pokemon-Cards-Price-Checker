@@ -1,3 +1,11 @@
+"""
+Raw TCG JSON data upload to S3 Script
+
+Purpose:
+- Uploads raw TCG JSON data to S3
+"""
+
+
 import boto3
 from pathlib import Path
 from datetime import datetime, timezone
