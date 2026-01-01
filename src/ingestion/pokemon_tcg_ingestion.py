@@ -21,13 +21,13 @@ load_dotenv()
 
 # change parents[index] if file depth changes, parents[2] points to root.
 BASE_DIR = Path(__file__).resolve().parents[2] 
+current_date = date.today()
 
-DATA_DIR = BASE_DIR / "data" / "raw"
+DATA_DIR = BASE_DIR / "data" / "raw" / "pokemon_tcg" / "cards" / str(current_date)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-FAILED_DATA_DIR =  BASE_DIR / "data" / "meta"
+FAILED_DATA_DIR =  BASE_DIR / "data" / "meta" / "pokemon_tcg" / "failed" / str(current_date)
 FAILED_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-current_date = date.today()
 run_id = f"pokemon_tcg_ingestion_{current_date}"
 output_path = DATA_DIR / f"{current_date}_full.json"
 failed_output_path = FAILED_DATA_DIR / f"{current_date}_failed.json"

@@ -16,12 +16,12 @@ from datetime import date, datetime
 import time
 
 load_dotenv()
+current_date = date.today()
 
 BASE_DIR = Path(__file__).resolve().parents[2] 
-DATA_DIR = BASE_DIR / "data" / "raw"
-FAILED_DATA_DIR =  BASE_DIR / "data" / "meta"
+DATA_DIR = BASE_DIR / "data" / "raw" / "pokemon_tcg" / "cards" / str(current_date)
+FAILED_DATA_DIR =  BASE_DIR / "data" / "meta" / "pokemon_tcg" / "failed" / str(current_date)
 
-current_date = date.today()
 failed_pages_path = FAILED_DATA_DIR / f"{current_date}_failed.json"
 output_path = DATA_DIR / f"{current_date}_backfill.json"
 fail_persisted_output_path = FAILED_DATA_DIR / f"{current_date}_fail_persisted.json"
