@@ -49,13 +49,3 @@ columns:
     type: date
     nullable: true
     description: Official release date of the card set
-
-  created_at:
-    type: timestamp
-    nullable: false
-    description: Timestamp when the card record was created
-
-  updated_at:
-    type: timestamp
-    nullable: false
-    description: Timestamp when the card record was last updated
