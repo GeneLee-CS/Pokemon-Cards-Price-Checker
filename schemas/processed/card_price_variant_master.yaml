@@ -4,7 +4,7 @@ description: >
   Each row is treated as an independent pricing entity for ranking and eBay tracking.
 
 columns:
-  price_variant_id:
+  card_price_variant_id:
     type: string
     nullable: false
     description: Deterministic identifier generated from card_id and price_type.
