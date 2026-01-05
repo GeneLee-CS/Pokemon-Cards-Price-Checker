@@ -18,23 +18,3 @@ columns:
     type: string
     nullable: false
     description: TCG price variant type (normal, holofoil, reverseHolofoil, 1stEditionHolofoil and 1stEditionNormal)
-
-  first_seen_date:
-    type: date
-    nullable: false
-    description: Date when this price variant was first observed in tcg_card_prices.
-
-  active_flag:
-    type: boolean
-    nullable: false
-    description: Indicates whether this price variant is currently active and eligible for downstream tracking.
-
-  created_at:
-    type: timestamp
-    nullable: false
-    description: Timestamp when this record was created.
-
-  updated_at:
-    type: timestamp
-    nullable: false
-    description: Timestamp when this record was last updated.
