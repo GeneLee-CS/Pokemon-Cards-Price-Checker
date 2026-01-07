@@ -49,3 +49,13 @@ columns:
     type: date
     nullable: true
     description: Official release date of the card set
+
+  image_small_url:
+    type: string
+    nullable: true
+    description: Small card image URL from Pokémon TCG API
+
+  image_large_url:
+    type: string
+    nullable: true
+    description: Large card image URL from Pokémon TCG API
