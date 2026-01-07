@@ -35,12 +35,12 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-RAW_DATA_PATH = PROJECT_ROOT / "data" / "raw" / "local" / "pokemon_tcg" / "cards" / "2025-12-10"
+RAW_DATA_PATH = PROJECT_ROOT / "data" / "raw" / "pokemon_tcg" / "cards" / "2025-12-10"
 STAGING_DATA_PATH = PROJECT_ROOT / "data" / "staging" / "pokemon_tcg"
 SCHEMA_PATH = PROJECT_ROOT / "schemas"
 
-CARDS_SCHEMA_FILE = SCHEMA_PATH / "tcg_cards.yaml"
-CARD_PRICES_SCHEMA_FILE = SCHEMA_PATH / "tcg_card_prices.yaml"
+CARDS_SCHEMA_FILE = SCHEMA_PATH / "staging" / "tcg_cards.yaml"
+CARD_PRICES_SCHEMA_FILE = SCHEMA_PATH / "staging" / "tcg_card_prices.yaml"
 
 
 # -------------------------------------------------------------------
@@ -188,6 +188,8 @@ def transform_cards(raw_cards: List[Dict], raw_path: Path) -> pd.DataFrame:
             "set_id": card.get("set", {}).get("id"),
             "set_name": card.get("set", {}).get("name"),
             "set_releaseDate": card.get("set", {}).get("releaseDate"),
+            "image_small_url": card.get("images", {}).get("small"),
+            "image_large_url": card.get("images", {}).get("large"),
             "ingestion_date": ingestion_date
         }
         records.append(record)
