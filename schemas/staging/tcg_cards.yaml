@@ -48,6 +48,16 @@ columns:
     nullable: true
     description: set release date in the US. YYYY/MM/DD
 
+  image_small_url:
+    type: string
+    nullable: true
+    description: Small card image URL from Pokémon TCG API
+
+  image_large_url:
+    type: string
+    nullable: true
+    description: Large card image URL from Pokémon TCG API
+
   ingestion_date:
     type: date
     nullable: false
