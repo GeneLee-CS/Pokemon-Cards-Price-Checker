@@ -64,6 +64,8 @@ def transform_card_master(df: pd.DataFrame) -> pd.DataFrame:
             "set_name",
             "number",
             "set_printedTotal",
+            "image_small_url",
+            "image_large_url",
             "set_releaseDate"
         ]
     ].copy()
