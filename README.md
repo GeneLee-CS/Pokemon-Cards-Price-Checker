@@ -46,6 +46,7 @@ An end-to-end **data engineering** project that collects, processes, stores, ana
 
 
 ## Repo Structure
+```text
 .
 |--src/
 |   |--ingestion/
