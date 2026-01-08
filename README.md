@@ -48,18 +48,19 @@ An end-to-end **data engineering** project that collects, processes, stores, ana
 ## Repo Structure
 ```text
 .
-|--src/
-|   |--ingestion/
-|   |--processing/
-|   |--analytics/
-|--schemas/
-|   |--staging/
-|   |--processed/
-|   |--analytics/
-|--pyproject.toml
-|--poetry.lock
-|--README.md
-|--.gitignore
+├── src/
+│   ├── ingestion/
+│   ├── processing/
+│   └── analytics/
+├── schemas/
+│   ├── staging/
+│   ├── processed/
+│   └── analytics/
+├── pyproject.toml
+├── poetry.lock
+├── README.md
+└── .gitignore
+```
 
 ## Data Models
 
