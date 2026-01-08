@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 from datetime import date
 import re
+import argparse
 
 import pandas as pd
 import yaml
@@ -35,12 +36,27 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-RAW_DATA_PATH = PROJECT_ROOT / "data" / "raw" / "pokemon_tcg" / "cards" / "2025-12-10"
 STAGING_DATA_PATH = PROJECT_ROOT / "data" / "staging" / "pokemon_tcg"
 SCHEMA_PATH = PROJECT_ROOT / "schemas"
 
 CARDS_SCHEMA_FILE = SCHEMA_PATH / "staging" / "tcg_cards.yaml"
 CARD_PRICES_SCHEMA_FILE = SCHEMA_PATH / "staging" / "tcg_card_prices.yaml"
+
+# adding ingestion date as arg for raw data path
+def parse_args():
+    parser = argparse.ArgumentParser(description="TCG raw -> staging transform")
+    parser.add_argument(
+        "--ingestion-date",
+        required=True,
+        help="Ingestion date folder to process (YYYY-MM-DD)"
+    )
+    return parser.parse_args()
+
+
+def get_raw_cards_path(ingestion_date: str) -> Path:
+    return(
+        PROJECT_ROOT / "data" / "raw" / "pokemon_tcg" / "cards" / ingestion_date
+    )
 
 
 # -------------------------------------------------------------------
@@ -329,25 +345,30 @@ def write_parquet(df: pd.DataFrame, output_path: Path) -> None:
     logger.info(f"Parquet write complete: {len(df)} rows")
 
 # -------------------------------------------------------------------
-# Orchestration
+# Main
 # -------------------------------------------------------------------
 
-def run() -> None:
+def main() -> None:
     """
     Main execution entrypoint.
     """
     logger.info("Starting staging transform")
+
+    args = parse_args()
+    ingestion_date = args.ingestion_date
+
+    raw_data_path = get_raw_cards_path(ingestion_date)
 
     # Load schemas
     cards_schema = load_schema(CARDS_SCHEMA_FILE)
     prices_schema = load_schema(CARD_PRICES_SCHEMA_FILE)
 
     # Load raw data
-    raw_cards = load_raw_cards(RAW_DATA_PATH)
+    raw_cards = load_raw_cards(raw_data_path)
 
     # Transform
-    cards_df = transform_cards(raw_cards, RAW_DATA_PATH)
-    prices_df = transform_card_prices(raw_cards, RAW_DATA_PATH)
+    cards_df = transform_cards(raw_cards, raw_data_path)
+    prices_df = transform_card_prices(raw_cards, raw_data_path)
 
     # Validate
     validate_dataframe(cards_df, cards_schema, "cards")
@@ -365,4 +386,4 @@ def run() -> None:
 # -------------------------------------------------------------------
 
 if __name__ == "__main__":
-    run()
+    main()
