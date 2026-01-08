@@ -1,0 +1,61 @@
+table_name: weekly_top_tcg_cards
+description: >
+  Weekly aggregated ranking table of top Pokémon cards based on market prices from the Pokémon TCG API. 
+  Rankings are computed at the card level.
+
+columns:
+  price_week:
+    type: date
+    nullable: false
+    description: >
+      Start date of the calendar week (e.g. Monday) derived from price_date.
+
+  card_id:
+    type: string
+    nullable: false
+    description: >
+      Deterministic identifier for the Pokémon card from card_master.
+
+  price_variant_id:
+    type: bigint
+    nullable: false
+    description: >
+      Deterministic identifier for the card price variant
+      (card_id + price_type).
+
+  price_type:
+    type: string
+    nullable: false
+    description: >
+      Price variant type (e.g. holofoil, reverseholofoil, normal).
+
+  avg_market_price:
+    type: double
+    nullable: false
+    description: >
+      Average market price for the card price variant during the week.
+
+  max_market_price:
+    type: double
+    nullable: false
+    description: >
+      Maximum observed market price for the card price variant during the week.
+
+  min_market_price:
+    type: double
+    nullable: false
+    description: >
+      Minimum observed market price for the card price variant during the week.
+
+  num_price_points:
+    type: integer
+    nullable: false
+    description: >
+      Number of daily price observations contributing to the weekly aggregate.
+
+  rank:
+    type: integer
+    nullable: false
+    description: >
+      Rank of the card price variant within the same price_type for the week,
+      ordered by avg_market_price descending.
