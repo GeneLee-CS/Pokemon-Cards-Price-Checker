@@ -73,7 +73,7 @@ An end-to-end **data engineering** project that collects, processes, stores, ana
 - 'card_price_variant_master' - Deterministic price variant dimension
 - 'tcg_price_history' - Append-only weekly price fact table
 
-**Analytics
+**Analytics**
 - 'weekly_top_tcg_cards' - Weekly card-level price rankings based on TCG
 
 ## Current Status
