@@ -44,6 +44,22 @@ An end-to-end **data engineering** project that collects, processes, stores, ana
 3. **Staging / Processing Layer**
     - Description: Transformation processes responsible forming schema-validated, flattened Parquet datasets
 
+
+## Repo Structure
+.
+|--src/
+|   |--ingestion/
+|   |--processing/
+|   |--analytics/
+|--schemas/
+|   |--staging/
+|   |--processed/
+|   |--analytics/
+|--pyproject.toml
+|--poetry.lock
+|--README.md
+|--.gitignore
+
 ## Data Models
 
 **Staging**
