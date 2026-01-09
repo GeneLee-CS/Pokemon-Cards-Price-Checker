@@ -24,12 +24,6 @@ import argparse
 import pandas as pd
 import yaml
 
-# Optional (will be used later)
-# import boto3
-# import pyarrow as pa
-# import pyarrow.parquet as pq
-
-
 # -------------------------------------------------------------------
 # Configuration
 # -------------------------------------------------------------------
