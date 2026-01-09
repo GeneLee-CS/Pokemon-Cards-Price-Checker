@@ -1,14 +1,14 @@
 table_name: weekly_top_tcg_cards
 description: >
   Weekly aggregated ranking table of top Pokémon cards based on market prices from the Pokémon TCG API. 
-  Rankings are computed at the card level.
+  Rankings are computed at the card level by selecting their highest market price across all price types.
 
 columns:
-  price_week:
+  price_date:
     type: date
     nullable: false
     description: >
-      Start date of the calendar week (e.g. Monday) derived from price_date.
+      Weekly price date from tcg_price_history.
 
   card_id:
     type: string
@@ -20,8 +20,7 @@ columns:
     type: bigint
     nullable: false
     description: >
-      Deterministic identifier for the card price variant
-      (card_id + price_type).
+      Deterministic identifier for the card price variant (card_id + price_type).
 
   price_type:
     type: string
@@ -29,33 +28,20 @@ columns:
     description: >
       Price variant type (e.g. holofoil, reverseholofoil, normal).
 
-  avg_market_price:
-    type: double
+  market_price:
+    type: decimal(10,2)
     nullable: false
     description: >
-      Average market price for the card price variant during the week.
-
-  max_market_price:
-    type: double
-    nullable: false
-    description: >
-      Maximum observed market price for the card price variant during the week.
-
-  min_market_price:
-    type: double
-    nullable: false
-    description: >
-      Minimum observed market price for the card price variant during the week.
-
-  num_price_points:
-    type: integer
-    nullable: false
-    description: >
-      Number of daily price observations contributing to the weekly aggregate.
+      Highest market price observed across all price types for the card during the given week.
 
   rank:
     type: integer
     nullable: false
     description: >
-      Rank of the card price variant within the same price_type for the week,
-      ordered by avg_market_price descending.
+      Global ranking of the card for the given week based on market price.
+
+  ingestion_date:
+    type: date
+    nullable: false
+    description: >
+      Date when the data was ingested into the analytics layer.
