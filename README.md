@@ -1,5 +1,5 @@
 # Pokémon Card Price Tracker
-An end-to-end **data engineering** project that collects, processes, stores, analyzes and visualizes current Pokémon card sale listings from eBay.
+An end-to-end **data engineering** project that collects, processes, stores, analyzes and visualizes current Pokémon card sale listings from eBay. Allowing users to view all active eBay listings for a card and compare listing prices and card quality. 
 
 ---
 
@@ -29,7 +29,7 @@ An end-to-end **data engineering** project that collects, processes, stores, ana
     - **Processed**: Analytics-ready tables for downstream consumption.
 
 1. **Ingestion Layer (base dataset)**
-    - Description: Pulls full pokemon card dataset from TCG Player's API
+    - Description: Pulls full Pokemon card dataset from TCG Player's API
 
     - **Design Note**:
         - The TCG Player API is relatively slow and can be unreliable for full-dataset pulls (timeouts, rate limits)
@@ -69,12 +69,15 @@ An end-to-end **data engineering** project that collects, processes, stores, ana
 - 'tcg_card_prices' - Flatted card price type(variants) and subsequent market prices
 
 **Processed**
-- 'card_master' - Static card reference dimension
-- 'card_price_variant_master' - Deterministic price variant dimension
+- 'card_master' - card master table with card metadata
+- 'card_price_variant_master' - price variant master table with each unique (card_id, price_variant) having its own row and id
 - 'tcg_price_history' - Append-only weekly price fact table
 
 **Analytics**
-- 'weekly_top_tcg_cards' - Weekly card-level price rankings based on TCG
+- 'weekly_top_tcg_cards' 
+    - Weekly card-level price rankings based on TCG market price
+    - Serves as input driver for downstream eBay API ingestion
+    - Limited at top 200 for now. Will eventually scale to top 3000
 
 ## Current Status
 - Scaffholding complete
@@ -84,4 +87,4 @@ An end-to-end **data engineering** project that collects, processes, stores, ana
 - Staging and processed layers implemented with schema validation
 - Card and price variant master tables populated
 - Price history fact table complete
-- Working on analytics layer for TCG data prior to eBay ingestion
+- Weekly top-N card analytics implementd (initially Top 200, scalable to Top 3000)
