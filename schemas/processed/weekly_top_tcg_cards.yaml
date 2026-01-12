@@ -16,19 +16,7 @@ columns:
     description: >
       Deterministic identifier for the Pokémon card from card_master.
 
-  price_variant_id:
-    type: bigint
-    nullable: false
-    description: >
-      Deterministic identifier for the card price variant (card_id + price_type).
-
-  price_type:
-    type: string
-    nullable: false
-    description: >
-      Price variant type (e.g. holofoil, reverseholofoil, normal).
-
-  market_price:
+  max_market_price:
     type: decimal(10,2)
     nullable: false
     description: >
