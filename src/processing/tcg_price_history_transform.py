@@ -9,7 +9,7 @@ Purpose:
 """
 
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -24,6 +24,7 @@ CARD_VARIANT_MASTER_PATH = PROJECT_ROOT / "data" / "processed" / "card_price_var
 PROCESSED_PATH = PROJECT_ROOT / "data" / "processed" / "tcg_price_history"
 SCHEMA_PATH = PROJECT_ROOT / "schemas" / "processed" / "tcg_price_history.yaml"
 
+SNAPSHOT_PRICE_DATE = datetime.now(timezone.utc).date().isoformat()
 
 # ---------------------------------------------------------------------
 # Utilities
@@ -69,7 +70,8 @@ def transform_price_history(df_prices: pd.DataFrame, df_variant_master: pd.DataF
         ]
     ].copy()
 
-    df.rename(columns={"tcg_update_date": "price_date", "market": "market_price"}, inplace=True)
+    df["price_date"] = SNAPSHOT_PRICE_DATE
+    df.rename(columns={"market": "market_price"}, inplace=True)
 
     df["price_date"] = pd.to_datetime(df["price_date"]).dt.date
     df["ingestion_date"] = pd.to_datetime(df["ingestion_date"]).dt.date
@@ -82,6 +84,7 @@ def transform_price_history(df_prices: pd.DataFrame, df_variant_master: pd.DataF
             "card_id",
             "card_price_variant_id",
             "price_date",
+            "tcg_update_date",
             "market_price",
             "ingestion_date"
         ]
