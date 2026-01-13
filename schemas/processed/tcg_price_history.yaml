@@ -17,7 +17,12 @@ columns:
   price_date:
     type: date
     nullable: false
-    description: Date the price was valid for. Sourced from tcg_card_prices.tcg_update_date.
+    description: Date the price was valid for. Derived from the date the process was ran.
+
+  tcg_update_date:
+    type: date
+    nullable: false
+    description: The most recent update date of this card from TCG. Sourced from tcg_card_prices.tcg_update_date.
 
   market_price:
     type: decimal(10,2)
