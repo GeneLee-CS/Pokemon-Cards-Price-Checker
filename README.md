@@ -71,7 +71,7 @@ An end-to-end **data engineering** project that collects, processes, stores, ana
 **Processed**
 - 'card_master' - card master table with card metadata
 - 'card_price_variant_master' - price variant master table with each unique (card_id, price_variant) having its own row and id
-- 'tcg_price_history' - Append-only weekly price fact table
+- 'tcg_price_history' - Append-only weekly price fact table. `price_date` is explicitly frozen at transform runtime.
 
 **Analytics**
 - 'weekly_top_tcg_cards' 
