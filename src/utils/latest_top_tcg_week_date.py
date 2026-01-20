@@ -1,5 +1,5 @@
 """
-latest_week_date.py
+latest_top_tcg_week_date.py
 
 Purpose:
 - Determines the most recent weekly snapshot of weekly_top_tcg_cards for downstream eBay ingestion
@@ -19,7 +19,7 @@ import re
 # Paths
 # -------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEEKLY_TOP_PATH = PROJECT_ROOT / "data" / "processed" / "analytics" / "weekly_top_tcg_cards"
 
 PRICE_DATE_PATTERN = re.compile(r"price_date=(\d{4}-\d{2}-\d{2})")
