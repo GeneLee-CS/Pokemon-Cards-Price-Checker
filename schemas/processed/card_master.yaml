@@ -35,6 +35,11 @@ columns:
     nullable: false
     description: Number of card in the set. Cards are often identified in the format number/set_printedTotal (e.g., 190/165 for secret rares)
 
+  card_number:
+    type: string
+    nullable: true
+    description: Additional identifier from the combination of number/set_printedTotal (e.g. 104/150)
+
   rarity:
     type: string
     nullable: true

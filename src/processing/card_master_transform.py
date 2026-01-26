@@ -78,6 +78,15 @@ def transform_card_master(df: pd.DataFrame) -> pd.DataFrame:
         inplace = True
     )
 
+    card_master["card_number"] = card_master.apply(
+        lambda r: (
+            f"{r['number']}/{int(r['set_printedTotal'])}"
+            if pd.notna(r["set_printedTotal"])
+            else r["number"]
+        ),
+        axis=1
+    )
+
     card_master = card_master.drop_duplicates(subset=["card_id"])
 
     return card_master
