@@ -1,0 +1,45 @@
+table: ebay_card_market_snapshot
+description: >
+  Snapshot of eBay listings that have been matched to card_id internally. 
+  Each row is a validated eBay listing. This tables serves as the primary analytics and website feed downstream for current eBay listings.
+
+columns:
+  listing_id:
+    type: string
+    nullable: false
+    description: Unique identifier used by eBay for each listing. Sourced from eBay Browse API.
+
+  card_id:
+    type: string
+    nullable: false
+    description: Internal unique identifier for each Pokemon Card that represents which card the listing has been matched to. This enables internal joins to other tables.
+
+  price:
+    type: decimal(10,2)
+    nullable: false
+    description: Price value of the listing sourced from eBay Browse API.
+
+  currency:
+    type: string
+    nullable: false
+    description: ISO currency code associated with the listing price (e.g., USD, CAD).
+
+  condition:
+    type: string
+    nullable: true
+    description: Human-readable eBay condition lable for the item (e.g. graded, ungraded). This field is not standardized across sellers.
+
+  match_confidence:
+    type: string
+    nullable: false
+    description: Confidence level of the title-to-card match based on parsing rules. (high, medium, low, reject)
+
+  raw_title:
+    type: string
+    nullable: false
+    description: Raw listing title as provided by eBay Brwose API.
+
+  ingestion_date:
+    type: date
+    nullable: false
+    description: Date when the eBay listing was ingested.
