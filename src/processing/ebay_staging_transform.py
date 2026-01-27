@@ -291,7 +291,7 @@ def main(price_date: str, ingestion_date: str) -> None:
     print(f"Accepted rows: {len(df)}")
 
     table = pa.Table.from_pandas(df, preserve_index = False)
-    output_path = STAGING_OUTPUT_PATH / f"price_date={price_date}"
+    output_path = STAGING_OUTPUT_PATH / f"price_date={price_date}" / f"ingestion_date={ingestion_date}"
     output_path.mkdir(parents=True, exist_ok=True)
 
     pq.write_table(table, output_path / "part-000.parquet")
