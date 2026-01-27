@@ -1,0 +1,102 @@
+table: ebay_listings
+description: >
+  Staging table containing active ebay listings for Pokemon TCG cards sourced from the ebay Browse API.
+  Each row represents a single active listing observed at ingestion time.
+  Data is append only and partitioned by price_date.
+
+columns:
+
+  listing_id:
+    type: string
+    nullable: false
+    description: Unique eBay listing identifier.
+
+  card_id:
+    type: string
+    nullable: false
+    description: Unique internal Pokemon card identifier, joined from weekly_top_tcg_cards.
+
+  price_date:
+    type: date
+    nullable: false
+    description: Weekly snapshot date representing when the TCG market price was captured. Used to determine top cards for the week before querying eBay.
+
+  ingestion_date:
+    type: date
+    nullable: false
+    description: Date when the eBay listing was ingested.
+
+  title:
+    type: string
+    nullable: false
+    description: Raw listing title as provided by eBay.
+
+  title_normalized:
+    type: string
+    nullable: false
+    description: Normalized title used for parsing and matching logic.
+
+  image_url:
+    type: string
+    nullable: true
+    description: Image url provided by eBay. Often represents a smaller image and may not be full resolution.
+
+  thumbnail_url:
+    type: string
+    nullable: true
+    description: Image URL sourced from the thumbnailImages object. Often represents a full-resolution image suitable for primary display in listings.
+
+  price_value:
+    type: decimal(10,2)
+    nullable: false
+    description: Listing price excluding shipping.
+
+  currency:
+    type: string
+    nullable: false
+    description: ISO currency code for the listing price (e.g. USD, CAD)
+
+  condition:
+    type: string
+    nullable: true
+    description: Human-readable eBya condition lable for the item (e.g. graded, ungraded). This field is not standardized across sellers.
+
+  condition_id:
+    type: integer
+    nullable: true
+    description: eBay condition identifier representing the condition classification for the listing.
+
+  listing_url:
+    type: string
+    nullable: false
+    description: Direct URL to the eBay listing.
+
+  is_graded:
+    type: boolean
+    nullable: false
+    description: Indicates whether the listing appears to be professionally graded based on the title. (Only PSA for now)
+
+  grade_value:
+    type: decimal(3,1)
+    nullable: true
+    description: Numeric grade value extracted from the listing title (e.g. 10, 9).
+
+  parsed_grade:
+    type: string
+    nullble: true
+    description: Human-readable grade label (e.g. PSA 10, PSA 9)
+
+  card_number_match:
+    type: boolean
+    nullable: false
+    description: Indicates whether the card number (e.g. 104/100) was successfully matched between the listing title and the card_number we're querying for on the API.
+
+  set_match:
+    type: boolean
+    nullable: false
+    description: Indicates whether the Pokemon set name was successfully matched between the listing title and the card set_name we're querying for on the API.
+
+  title_match_confidence:
+    type: string
+    nullable: false
+    description: Confidence level of the title-to-card match based on parsing rules. (high, medium, low, reject)
