@@ -59,7 +59,7 @@ columns:
   condition:
     type: string
     nullable: true
-    description: Human-readable eBya condition lable for the item (e.g. graded, ungraded). This field is not standardized across sellers.
+    description: Human-readable eBay condition lable for the item (e.g. graded, ungraded). This field is not standardized across sellers.
 
   condition_id:
     type: integer
