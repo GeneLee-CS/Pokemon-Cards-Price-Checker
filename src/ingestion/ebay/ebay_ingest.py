@@ -9,9 +9,13 @@ Purpose:
 from __future__ import annotations
 import json
 import os
+import time
+import random
 from pathlib import Path
-from typing import Dict, Any, List
-from datetime import date
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass
+from datetime import datetime, timezone
+import logging
 
 import pandas as pd
 
@@ -23,41 +27,44 @@ from src.utils.latest_top_tcg_week_date import get_latest_price_date
 # Config
 # ======================
 
+logger = logging.getLogger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 WEEKLY_TOP_TCG_PATH = PROJECT_ROOT / "data" / "processed" / "analytics" / "weekly_top_tcg_cards"
 CARD_MASTER_PATH = PROJECT_ROOT / "data" / "processed" / "card_master"
-card_master_df = pd.read_parquet(CARD_MASTER_PATH)
+RAW_OUTPUT_BASE = (PROJECT_ROOT/ "data" / "raw" / "ebay" / "listings")
 
-TOP_N_CARDS = 10
-RESULTS_PER_CARD = 50
-
-RAW_OUTPUT_BASE = (
-    PROJECT_ROOT/ "data" / "raw" / "ebay" / "listings"
-)
-
-INGESTION_DATE = date.today().isoformat()
+@dataclass(frozen=True)
+class IngestConfig:
+    top_n_cards: int = 10
+    page_size: int = 50
+    max_results_per_card: int = 200
+    max_pages: int = 10
+    retry_attempts: int = 5
+    retry_base_seconds: float = 0.75
 
 
 # ======================
 # Helpers
 # ======================
 
-def load_latest_top_card(price_date: str) -> pd.DataFrame:
-    path = (
-        PROJECT_ROOT / "data" / "processed" / "analytics" / "weekly_top_tcg_cards" / f"price_date={price_date}"
-    )
+def utc_today_iso() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def load_latest_top_card(project_root: Path, price_date: str, top_n: int) -> pd.DataFrame:
+    path = (project_root / "data" / "processed" / "analytics" / "weekly_top_tcg_cards" / f"price_date={price_date}")
 
     if not path.exists():
-        raise FileNotFoundError(f"weekly_top_tcg_cards not found for {price_date}")
+        raise FileNotFoundError(f"weekly_top_tcg_cards not found for price_date={price_date}")
     
     df = pd.read_parquet(path)
-    return df.head(TOP_N_CARDS)
+    return df.head(top_n)
 
 
 def build_search_query(row: pd.Series) -> str:
     """
-    Naive query builder for temporary use.
-    This will change later.
+    Will be replaced by ebay_search.py post-exploratory phase.
     """
     number = row["number"]
     printed_total = row.get("set_printedTotal")
@@ -77,11 +84,13 @@ def build_search_query(row: pd.Series) -> str:
 
 
 def write_raw_json(
+    *,
     price_date: str,
+    ingestion_date: str,
     card_id: str,
     payload: Dict[str, Any]
-) -> None:
-    output_dir = RAW_OUTPUT_BASE / f"price_date={price_date}" / f"ingestion_date={INGESTION_DATE}"
+) -> Path:
+    output_dir = RAW_OUTPUT_BASE / f"price_date={price_date}" / f"ingestion_date={ingestion_date}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_path = output_dir / f"{card_id}.json"
@@ -89,28 +98,69 @@ def write_raw_json(
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
-    print(f"Saved raw JSON -> {output_path}")
+    return output_path
 
 
-def summarize_listings(items: List[Dict[str, Any]]) -> None:
-    prices = []
+def summarize_listings(items: List[Dict[str, Any]]) -> str:
+    prices: List[float] = []
 
     for item in items:
         try:
-            price = float(item["price"]["value"])
-            prices.append(price)
+            prices.append(float(item["price"]["value"]))
         except Exception:
             continue
 
     if not prices:
-        print("No valid prices found")
-        return
+        return "Listings: 0 | no valid prices"
     
-    print(
-        f"Listings: {len(prices)} | "
-        f"min: ${min(prices):.2f} | "
-        f"max: ${max(prices):.2f}"
-    )
+    return f"Listings: {len(prices)} | min: ${min(prices):.2f} | max: ${max(prices):.2f}"
+
+def fetch_all_items_for_query(
+        *,
+        client: EbayClient,
+        query: str,
+        page_size: int,
+        max_results: int,
+        max_pages: int
+) -> Dict[str, Any]:
+    """
+    Fetches multiple pages from eBay Browse API and returns the acummulated itemSummaries.
+    """
+
+    all_items: List[Dict[str,Any]] = []
+    merged_payload: Dict[str, Any] = {}
+
+    offset = 0
+    pages = 0
+
+    while len(all_items) < max_results and pages < max_pages:
+        pages += 1
+        limit = min(page_size, max_results - len(all_items))
+
+        payload = client.search_items(
+            query=query,
+            limit=limit,
+            offset=offset
+        )
+
+        if not isinstance(payload, dict):
+            break
+
+        items = payload.get("itemSummaries", []) or []
+
+        if not items:
+            break
+
+        all_items.extend(items)
+        merged_payload = payload
+
+        if len(items) < limit:
+            break
+
+        offset += len(items)
+
+    merged_payload["itemSummaries"] = all_items
+    return merged_payload
 
 
 # ======================
@@ -119,13 +169,23 @@ def summarize_listings(items: List[Dict[str, Any]]) -> None:
 
 
 def main() -> None:
-    print("Starting exploratory eBay ingestion")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s"
+    )
+
+    cfg = IngestConfig()
+
+    logger.info("Starting eBay ingestion")
+    ingestion_date = utc_today_iso()
+
 
     latest_price_date = get_latest_price_date()
+    logger.info("Latest price_date detected: %s", latest_price_date)
 
-    print(f"Latest price_date detected as: {latest_price_date}")
+    top_cards_df = load_latest_top_card(PROJECT_ROOT, latest_price_date, cfg.top_n_cards)
 
-    top_cards_df = load_latest_top_card(latest_price_date)
+    card_master_df = pd.read_parquet(CARD_MASTER_PATH)
 
     enriched_df = top_cards_df.merge(
         card_master_df,
@@ -137,27 +197,46 @@ def main() -> None:
     auth = EbayAuthClient()
     client = EbayClient(auth)
 
+    passed = 0
+    failed = 0
+
     for _, row in enriched_df.iterrows():
         card_id = row["card_id"]
         query = build_search_query(row)
 
-        print(f"Searching eBay for : {query}")
+        logger.info("Searching eBay | card_id=%s | query=%s", card_id, query)
 
-        response = client.search_items(
-            query = query,
-            limit = RESULTS_PER_CARD
-        )
+        try:
+            response = fetch_all_items_for_query(
+                client=client,
+                query=query,
+                page_size=cfg.page_size,
+                max_results=cfg.max_results_per_card,
+                max_pages=cfg.max_pages
+            )
 
-        write_raw_json(
-            price_date = latest_price_date,
-            card_id = card_id,
-            payload = response
-        )
+            output_path = write_raw_json(
+                price_date=latest_price_date,
+                ingestion_date=ingestion_date,
+                card_id=card_id,
+                payload=response
+            )
 
-        items = response.get("itemSummaries", [])
-        summarize_listings(items)
+            items = response.get("itemSummaries", []) or []
+            logger.info("card_id: %s results | %s", card_id, summarize_listings(items))
+            passed += 1
 
-    print("eBay ingestion complete")
+        except Exception as e:
+            failed += 1
+            logger.exception("Failed | card_id=%s | query=%s | err=%s", card_id, query, e)
+
+    logger.info(
+        "eBay ingestion complete | passed=%d | failed=%d | ingestion_date=%s | price_date=%s",
+        passed,
+        failed,
+        ingestion_date,
+        latest_price_date
+    )
 
 
 if __name__ == "__main__":
