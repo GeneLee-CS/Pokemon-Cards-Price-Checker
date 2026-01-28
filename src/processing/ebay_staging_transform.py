@@ -254,6 +254,7 @@ def main(price_date: str, ingestion_date: str) -> None:
         raise FileNotFoundError(f"raw path not found :{base_path}")
     
     rows: List[Dict[str, Any]] = []
+    rejected_count = 0
 
     for json_file in base_path.glob("*.json"):
         card_id = json_file.stem 
@@ -279,8 +280,11 @@ def main(price_date: str, ingestion_date: str) -> None:
                     price_date=price_date,
                     ingestion_date=ingestion_date
                 )
-            if row is not None:
-                rows.append(row)
+            if row is None:
+                rejected_count += 1
+                continue
+
+            rows.append(row)
 
     if not rows:
         print("No listings processed")
@@ -289,6 +293,7 @@ def main(price_date: str, ingestion_date: str) -> None:
     df = pd.DataFrame(rows)
     
     print(f"Accepted rows: {len(df)}")
+    print(f"Rejected rows: {rejected_count}")
 
     table = pa.Table.from_pandas(df, preserve_index = False)
     output_path = STAGING_OUTPUT_PATH / f"price_date={price_date}" / f"ingestion_date={ingestion_date}"
