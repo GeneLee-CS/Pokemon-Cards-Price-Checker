@@ -29,6 +29,11 @@ columns:
     nullable: true
     description: Human-readable eBay condition lable for the item (e.g. graded, ungraded). This field is not standardized across sellers.
 
+  is_graded:
+    type: boolean
+    nullable: false
+    description: Indicates whether the listing appears to be professionally graded based on the title. (Only PSA for now)
+
   match_confidence:
     type: string
     nullable: false
