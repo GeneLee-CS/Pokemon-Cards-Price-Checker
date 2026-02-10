@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from src.analytics.duckdb.duckdb_client import get_connection
+from datetime import datetime
 
 router = APIRouter()
 
@@ -29,13 +30,17 @@ def get_card_detail(card_id: str):
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
     
+    release_date = card[5]
+    if isinstance(release_date, str):
+        release_date = datetime.strptime(release_date, "%Y/%m/%d").date()
+
     card_dict = {
         "card_id": card[0],
         "card_name": card[1],
         "set_name": card[2],
         "card_number": card[3],
         "rarity": card[4],
-        "release_date": card[5],
+        "release_date": release_date,
         "image_small_url": card[6],
         "image_large_url": card[7]
     }
@@ -116,8 +121,8 @@ def get_card_detail(card_id: str):
     
     return {
         "card": card_dict,
-        "latest_price": latest_price_dict,
-        "price_history": price_history,
+        "latest_tcg_price": latest_price_dict,
+        "tcg_price_history": price_history,
         "ebay_market": ebay_market_dict
     }
 
