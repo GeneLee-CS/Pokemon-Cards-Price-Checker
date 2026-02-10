@@ -36,3 +36,11 @@ def build_ebay_card_market_summary(con):
             CROSS JOIN latest_week l;
         """
     )
+
+if __name__ == "__main__":
+    import duckdb
+
+    con = duckdb.connect("data/duckdb/pokemon.duckdb")
+    build_ebay_card_market_summary(con)
+    con.close()
+    
