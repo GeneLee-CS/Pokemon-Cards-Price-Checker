@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Query, HTTPException
 
-from src.analytics.duckdb.duckdb_client import get_connection
-from src.analytics.duckdb.search import search_cards_by_name
-from src.analytics.duckdb.card_detail import get_card_detail
+from src.services.search_service import search_cards
+from src.services.card_service import fetch_card_detail
+from src.api.schemas.card_detail import CardDetailResponse
 
 app = FastAPI(title="Pokemon TCG API")
 
@@ -11,22 +11,16 @@ def health():
     return {"status": "ok"}
 
 @app.get("/search")
-def search_cards(
+def search_cards_endpoint(
     query: str = Query(..., min_length=2),
     limit: int = Query(20, le=50)
 ):
-    con = get_connection()
-
-    df = search_cards_by_name(con, query, limit)
-
-    return df.to_dict(orient='records')
+    return search_cards(query, limit)
 
 
-@app.get("/cards/{card_id}")
+@app.get("/cards/{card_id}", response_model=CardDetailResponse)
 def card_detail(card_id: str):
-    con = get_connection()
-
-    result = get_card_detail(card_id)
+    result = fetch_card_detail(card_id)
 
     if result is None:
         raise HTTPException(status_code=404, detail = "Card not found")
