@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 def build_ebay_card_market_summary(con):
     """
     Builds card-level eBay market summary aligned to the latest TCG price_date
