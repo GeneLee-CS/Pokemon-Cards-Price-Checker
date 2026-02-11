@@ -37,6 +37,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from src.utils.latest_top_tcg_week_date import get_latest_price_date
+from src.processing.ebay_filters import is_non_card_listing
 
 
 # -------------------------------------------------
@@ -78,9 +79,8 @@ def normalize_card_name(card_name: str) -> str:
     card_name = card_name.lower()
     card_name = re.sub(r"[^\w\s]", " ", card_name)
     card_name = re.sub(
-        r"\b(ex|gx|v|vmax|vstar|promo|alt|art|lvx)\b",
-        " ",
-        card_name,
+        r"\b(ex|gx|v|vmax|vstar|promo|alt|art|lvx|gold foil)\b", " ",
+        card_name
     )
     card_name = card_name.replace("δ", "")
     card_name = re.sub(r"\s+", " ", card_name)
@@ -166,12 +166,9 @@ def transform_listing(
     title_normalized = normalize_title(raw_title)
 
     # Ignoring listings that are not Pokemon cards
-    NON_CARD_KEYWORDS = {"proxy","fan art","fanart","custom","sticker","display","print","poster","reprint","fake","unofficial", "replica", "art case", "artwork case"}
-
-    for kw in NON_CARD_KEYWORDS:
-        if kw in title_normalized:
-            print(f"Listing rejected: {raw_title}")
-            return None
+    if is_non_card_listing(title_normalized):
+        print(f"Listing rejected: {raw_title}")
+        return None
     
     canonical_name = card_row["card_name"]
     canonical_card_number = card_row["card_number"]
