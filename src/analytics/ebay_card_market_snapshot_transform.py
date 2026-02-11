@@ -16,6 +16,7 @@ from pathlib import Path
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import yaml
 
 # -------------------------------------------------
 # Paths 
@@ -25,6 +26,27 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 STAGING_PATH = (PROJECT_ROOT / "data" / "staging" / "ebay" / "listings")
 ANALYTICS_PATH = (PROJECT_ROOT / "data" / "analytics" / "ebay_market_snapshot")
+SCHEMA_PATH = (PROJECT_ROOT / "schemas" / "analytics" / "ebay_card_market_snapshot.yaml")
+
+
+# -------------------------------------------------
+# Schema Validation
+# -------------------------------------------------
+def load_schema(schema_path: Path) -> list[str]:
+    with open(schema_path, "r") as f:
+        return yaml.safe_load(f)
+
+def validate_schema(df: pd.DataFrame, schema: dict) -> None:
+    expected_columns = schema["columns"].keys()
+
+    missing_columns = set(expected_columns) - set(df.columns)
+    extra_columns = set(df.columns) - set(expected_columns)
+
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {missing_columns}")
+    
+    if extra_columns:
+        raise ValueError(f"Unexpected columns present: {extra_columns}")
 
 
 # -------------------------------------------------
@@ -43,6 +65,7 @@ def transform_ebay_card_market_snapshot(df: pd.DataFrame) -> pd.DataFrame:
             "is_graded",
             "title_match_confidence",
             "title",
+            "listing_url",
             "ingestion_date"
         ]
     ].copy()
@@ -117,6 +140,9 @@ def main() -> None:
     staging_df = pd.concat(dfs, ignore_index=True)
 
     analytics_df = transform_ebay_card_market_snapshot(staging_df)
+
+    required_columns = load_schema(SCHEMA_PATH)
+    validate_schema(analytics_df, required_columns)
 
     if analytics_df.empty:
         print("No valid eBay listings after filtering")

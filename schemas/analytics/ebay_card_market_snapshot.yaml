@@ -14,7 +14,7 @@ columns:
     nullable: false
     description: Internal unique identifier for each Pokemon Card that represents which card the listing has been matched to. This enables internal joins to other tables.
 
-  price:
+  price_value:
     type: decimal(10,2)
     nullable: false
     description: Price value of the listing sourced from eBay Browse API.
@@ -34,16 +34,21 @@ columns:
     nullable: false
     description: Indicates whether the listing appears to be professionally graded based on the title. (Only PSA for now)
 
-  match_confidence:
+  title_match_confidence:
     type: string
     nullable: false
     description: Confidence level of the title-to-card match based on parsing rules. (high, medium, low, reject)
 
-  raw_title:
+  title:
     type: string
     nullable: false
     description: Raw listing title as provided by eBay Brwose API.
 
+  listing_url:
+    type: string
+    nullable: false
+    description: Canonical eBay item URL.
+    
   ingestion_date:
     type: date
     nullable: false
