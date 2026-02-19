@@ -1,7 +1,7 @@
+from typing import Any
 import duckdb
-con = duckdb.connect()
 
-def search_cards_by_name(con, search_term: str, limit: int = 20):
+def search_cards_by_name(con: duckdb.DuckDBPyConnection, search_term: str, limit: int = 20) -> list[dict[str, Any]]:
     query = """
     SELECT
         card_id,
@@ -9,10 +9,12 @@ def search_cards_by_name(con, search_term: str, limit: int = 20):
         set_name,
         card_number,
         image_small_url
-    FROM read_parquet('s3://pokemon-tcg-data-lake/processed/card_master/*.parquet')
+    FROM card_master
     WHERE LOWER(card_name) LIKE '%' || LOWER(?) || '%'
     ORDER BY card_name
     LIMIT ?
     """
 
-    return con.execute(query, [search_term, limit]).fetchdf()
+    rows = con.execute(query, [search_term, limit]).fetchall()
+    columns = [c[0] for c in con.description]
+    return [dict(zip(columns, row)) for row in rows]

@@ -1,16 +1,31 @@
-from dotenv import load_dotenv
-load_dotenv()
+from contextlib import asynccontextmanager
 
 from typing import Literal
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
 
 from src.services.search_service import search_cards
 from src.services.card_service import fetch_card_detail
 from src.services.card_listings_service import fetch_card_listings
 from src.api.schemas.card_detail import CardDetailResponse
+from src.analytics.duckdb.duckdb_client import get_connection
 
 
-app = FastAPI(title="Pokemon TCG API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    con = get_connection()
+    app.state.duckdb_con = con
+    try:
+        yield
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
+app = FastAPI(title="Pokemon TCG API", lifespan=lifespan)
+
+def _get_con(request: Request):
+    return request.app.state.duckdb_con
 
 @app.get("/health")
 def health():
@@ -18,15 +33,16 @@ def health():
 
 @app.get("/search")
 def search_cards_endpoint(
+    request: Request,
     query: str = Query(..., min_length=2),
-    limit: int = Query(20, le=50)
+    limit: int = Query(20, ge=1, le=50)
 ):
-    return search_cards(query, limit)
+    return search_cards(_get_con(request), query, limit)
 
 
 @app.get("/cards/{card_id}", response_model=CardDetailResponse)
-def card_detail(card_id: str):
-    result = fetch_card_detail(card_id)
+def card_detail(request: Request, card_id: str):
+    result = fetch_card_detail(_get_con(request), card_id)
 
     if result is None:
         raise HTTPException(status_code=404, detail = "Card not found")
@@ -35,8 +51,14 @@ def card_detail(card_id: str):
 
 @app.get("/cards/{card_id}/listings")
 def card_listings(
+    request: Request,
     card_id: str,
     sort: Literal["price_asc", "price_desc"] = "price_asc",
     limit: int = Query(20, ge=1, le=50),
 ):
-    return fetch_card_listings(card_id, sort, limit)
+    result = fetch_card_listings(_get_con(request), card_id, sort, limit)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    
+    return result

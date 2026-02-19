@@ -1,13 +1,11 @@
-from fastapi import APIRouter, HTTPException
-from src.analytics.duckdb.duckdb_client import get_connection
-from datetime import datetime
+from __future__ import annotations
 
-router = APIRouter()
+from typing import Any
+from datetime import datetime, date
+import duckdb
 
 
-@router.get("/cards/{card_id}")
-def get_card_detail(card_id: str):
-    con = get_connection()
+def get_card_detail(con: duckdb.DuckDBPyConnection, card_id: str) -> dict[str, Any] | None:
 
     # Card metadata
     card = con.execute(
@@ -28,11 +26,15 @@ def get_card_detail(card_id: str):
     ).fetchone()
 
     if not card:
-        raise HTTPException(status_code=404, detail="Card not found")
+        return None
     
     release_date = card[5]
     if isinstance(release_date, str):
         release_date = datetime.strptime(release_date, "%Y/%m/%d").date()
+    elif isinstance(release_date, datetime):
+        release_date = release_date.date()
+    elif not isinstance(release_date, date):
+        pass
 
     card_dict = {
         "card_id": card[0],

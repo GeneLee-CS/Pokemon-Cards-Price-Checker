@@ -1,5 +1,4 @@
-from dotenv import load_dotenv
-load_dotenv()
+from src.analytics.duckdb.duckdb_client import get_connection
 
 def build_ebay_card_market_summary(con):
     """
@@ -8,10 +7,28 @@ def build_ebay_card_market_summary(con):
 
     con.execute(
         """
-        CREATE OR REPLACE TABLE ebay_card_market_summary AS
+        CREATE TABLE IF NOT EXISTS ebay_card_market_summary (
+            card_id VARCHAR,
+            price_date DATE,
+            listing_count BIGINT,
+            min_price DOUBLE,
+            median_price DOUBLE,
+            max_price DOUBLE,
+            graded_listing_count BIGINT,
+            ungraded_listing_count BIGINT
+            );
+        """
+    )
+
+    con.execute(
+        """
         WITH latest_week AS (
             SELECT MAX(price_date) AS price_date
             FROM weekly_top_tcg_cards
+            ),
+            latest_snapshot AS(
+                SELEXT MAX(ingestion_date) AS ingestion_date
+                FROM ebay_market_snapshot
             ),
             aggregated AS (
                 SELECT
@@ -24,8 +41,10 @@ def build_ebay_card_market_summary(con):
                     SUM(CASE WHEN NOT is_graded THEN 1 ELSE 0 END) AS ungraded_listing_count
                 FROM ebay_market_snapshot
                 WHERE currency = 'USD'
+                    AND ingestion_date = (SELECT ingestion_date FROM latest_snapshot)
                 GROUP BY card_id
                 )
+        INSERT INTO ebay_card_market_summary
             SELECT
                 a.card_id,
                 l.price_date,
@@ -36,14 +55,20 @@ def build_ebay_card_market_summary(con):
                 a.graded_listing_count,
                 a.ungraded_listing_count
             FROM aggregated a
-            CROSS JOIN latest_week l;
+            CROSS JOIN latest_week l
+            WHERE NOT EXISTS(
+                SELECT 1
+                FROM ebay_card_market_summary e
+                where r.price_date = l.price_date
+                    AND e.card_id = a.card_id
+                );
         """
     )
 
 if __name__ == "__main__":
-    import duckdb
+    from src.analytics.duckdb.duckdb_client import get_connection
 
-    con = duckdb.connect("data/duckdb/pokemon.duckdb")
+    con = get_connection()
     build_ebay_card_market_summary(con)
     con.close()
     

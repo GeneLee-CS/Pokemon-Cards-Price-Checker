@@ -1,9 +1,8 @@
 import duckdb
 import os
-from dotenv import load_dotenv
 from src.analytics.duckdb.views import create_views
 
-load_dotenv()
+
 DUCKDB_PATH = os.getenv(
     "DUCKDB_PATH",
     "data/duckdb/pokemon.duckdb"
@@ -24,6 +23,8 @@ def get_connection():
     aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     aws_region = os.getenv("AWS_REGION", "us-east-2")
 
+    if not aws_access_key or not aws_secret_key:
+        raise RuntimeError("Missing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in env")
 
     con.execute(f"SET s3_region='{aws_region}';")
     con.execute(f"SET s3_access_key_id='{aws_access_key}';")

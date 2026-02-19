@@ -1,17 +1,18 @@
 from typing import Literal
 
-from src.analytics.duckdb.duckdb_client import get_connection
+import duckdb
 from src.analytics.duckdb.card_listings import get_card_listings
 
 def fetch_card_listings(
+        con: duckdb.DuckDBPyConnection,
         card_id: str,
         sort: Literal["price_asc", "price_desc"],
         limit: int
 ) -> dict:
     
-    con = get_connection()
-
+ 
     listings = get_card_listings(
+        con=con,
         card_id=card_id,
         sort=sort,
         limit=limit
