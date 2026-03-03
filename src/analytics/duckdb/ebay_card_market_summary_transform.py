@@ -27,7 +27,7 @@ def build_ebay_card_market_summary(con):
             FROM weekly_top_tcg_cards
             ),
             latest_snapshot AS(
-                SELEXT MAX(ingestion_date) AS ingestion_date
+                SELECT MAX(ingestion_date) AS ingestion_date
                 FROM ebay_market_snapshot
             ),
             aggregated AS (
@@ -37,8 +37,8 @@ def build_ebay_card_market_summary(con):
                     MIN(price_value) AS min_price,
                     quantile_cont(price_value, 0.5) AS median_price,
                     MAX(price_value) AS max_price,
-                    SUM(CASE WHEN is_graded THEN 1 ELSE 0 END) AS graded_listing_count,
-                    SUM(CASE WHEN NOT is_graded THEN 1 ELSE 0 END) AS ungraded_listing_count
+                    SUM(CASE WHEN COALESCE(is_graded, FALSE) THEN 1 ELSE 0 END) AS graded_listing_count,
+                    SUM(CASE WHEN NOT COALESCE(is_graded, FALSE) THEN 1 ELSE 0 END) AS ungraded_listing_count
                 FROM ebay_market_snapshot
                 WHERE currency = 'USD'
                     AND ingestion_date = (SELECT ingestion_date FROM latest_snapshot)
@@ -59,7 +59,7 @@ def build_ebay_card_market_summary(con):
             WHERE NOT EXISTS(
                 SELECT 1
                 FROM ebay_card_market_summary e
-                where r.price_date = l.price_date
+                where e.price_date = l.price_date
                     AND e.card_id = a.card_id
                 );
         """
