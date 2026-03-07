@@ -2,122 +2,236 @@
 TCG API ingestion Script
 
 Purpose:
-- Queries TCG's API for full catalog data
-- Outputs raw JSON file and file for missing pages due to API errors
-- Write outputs to S3 / local raw layer in JSON format
+- Fetches the full Pokémon TCG card catalog from the Pokémon TCG API
+- Write outputs to S3 in JSON format
+- Writes a failed-pages manifest to S3 meta zone (partitioned by ingestion_date) if any pages fail
+
+Design:
+- Full ingestion weekly for correctness/simplicity
 """
 
 
-import os
-import requests
-from dotenv import load_dotenv
+from __future__ import annotations
+
 import json
-from pathlib import Path
-from datetime import date, datetime
-from math import ceil
+import os
 import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-load_dotenv()
+import boto3
+import requests
 
-# change parents[index] if file depth changes, parents[2] points to root.
-BASE_DIR = Path(__file__).resolve().parents[2] 
-current_date = date.today()
+from src.utils.run_context import RunContext
 
-DATA_DIR = BASE_DIR / "data" / "raw" / "pokemon_tcg" / "cards" / str(current_date)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-FAILED_DATA_DIR =  BASE_DIR / "data" / "meta" / "pokemon_tcg" / "failed" / str(current_date)
-FAILED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+# -----------------------------
+# Config
+# -----------------------------
 
-run_id = f"pokemon_tcg_ingestion_{current_date}"
-output_path = DATA_DIR / f"{current_date}_full.json"
-failed_output_path = FAILED_DATA_DIR / f"{current_date}_failed.json"
+TCG_BASE_URL = "https://api.pokemontcg.io/v2/cards"
 
-API_KEY = os.getenv("POKEMON_TCG_API_KEY")
+DEFAULT_PAGE_SIZE = 200  # API supports up to 250
+DEFAULT_MAX_RETRIES = 5
 
-base_url = "https://api.pokemontcg.io/v2/cards"
+RETRYABLE_STATUS_CODES = {429, 404, 500, 502, 503, 504}
 
-headers = {
-    "X-Api-Key": API_KEY
-}
+@dataclass(frozen=True)
+class IngestionConfig:
+    bucket: str
+    raw_prefix: str 
+    meta_prefix: str 
+    page_size: int = DEFAULT_PAGE_SIZE
+    max_retries: int = DEFAULT_MAX_RETRIES
+    request_timeout: Tuple[int, int] = (30, 180) 
+    polite_sleep_seconds: float = 3
 
-# for pages that failed after 5 attempts.
-failed_pages = []
-all_cards = []
-page = 1
 
-done = False
+def _require_env(name: str) -> str:
+    val = os.getenv(name)
+    if not val:
+        raise ValueError(f"Missing required environment variable: {name}")
+    return val
 
-while not done:
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-    success = False
+def _s3_client():
+    return boto3.client("s3")
 
-    # attempts to retry if server side timeouts 
-    for attempts in range(5):
+def _s3_head_exists(s3, bucket: str, key: str) -> bool:
+    try:
+        s3.head_object(Bucket=bucket, Key=key)
+        return True
+    except Exception:
+        return False
+
+def _s3_put_json(s3, bucket: str, key: str, payload: Any) -> None:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=body,
+        ContentType="application/json; charset=utf-8"
+    )
+
+def _fetch_page(
+    session: requests.Session,
+    api_key: str,
+    page: int,
+    page_size: int,
+    timeout: Tuple[int, int],
+    max_retries: int,
+) -> Tuple[Optional[List[Dict[str, Any]]], Optional[int], Optional[int]]:
+    
+    headers = {"X-Api-Key": api_key}
+
+    for attempt in range(max_retries):
         try:
-            resp = requests.get(base_url, params={"page":page, "pageSize":50}, headers=headers, timeout=(30,180))
+            resp = session.get(
+                TCG_BASE_URL,
+                params={"page": page, "pageSize": page_size},
+                headers=headers,
+                timeout=timeout,
+            )
+            status = resp.status_code
+
+            if status in RETRYABLE_STATUS_CODES:
+                wait = 2 * (attempt + 1)
+                print(f"[WARN] {status} on page {page}. Retrying in {wait}s (attempt {attempt+1}/{max_retries})...")
+                time.sleep(wait)
+                continue
+
             resp.raise_for_status()
             body = resp.json()
+
             cards = body.get("data", [])
             total = body.get("totalCount")
+            return cards, total, status
+
+        except requests.exceptions.RequestException as e:
+            wait = 2 * (attempt + 1)
+            print(f"[WARN] Network/HTTP error on page {page}: {e}. Retrying in {wait}s (attempt {attempt+1}/{max_retries})...")
+            time.sleep(wait)
+
+    # Failed after retries
+    return None, None, None
+
+
+def run_full_ingestion(cfg: IngestionConfig) -> None:
+    run_date = datetime.now(timezone.utc).date().isoformat()
+
+    ctx = RunContext(
+        bucket=cfg.bucket,
+        price_date=run_date,
+        ingestion_date=run_date,
+        run_id=f"pokemon_tcg_ingestion_{run_date}",
+    )
+
+    ingestion_date = ctx.ingestion_date  # frozen per run (string YYYY-MM-DD)
+
+    api_key = _require_env("POKEMON_TCG_API_KEY")
+
+    #test var
+    max_test_pages = int(os.getenv("POKEMON_TCG_MAX_PAGES", "0"))
+
+    raw_key = f"{cfg.raw_prefix}/ingestion_date={ingestion_date}/cards.json"
+    failed_key = f"{cfg.meta_prefix}/ingestion_date={ingestion_date}/failed_pages.json"
+
+    s3 = _s3_client()
+
+    if _s3_head_exists(s3, cfg.bucket, raw_key):
+        print(f"[INFO] Raw output already exists. Skipping: s3://{cfg.bucket}/{raw_key}")
+        return
+
+    failed_pages: List[int] = []
+    all_cards: List[Dict[str, Any]] = []
+
+    page = 1
+    total_count: Optional[int] = None
+
+    with requests.Session() as session:
+        while True:
+
+            if max_test_pages and page > max_test_pages:
+                print(f"[TEST MODE] Stopping after {max_test_pages} pages.")
+                break
+
+            cards, total, status = _fetch_page(
+                session=session,
+                api_key=api_key,
+                page=page,
+                page_size=cfg.page_size,
+                timeout=cfg.request_timeout,
+                max_retries=cfg.max_retries,
+            )
+
+            if cards is None:
+                print(f"[ERROR] Failed to fetch page {page} after {cfg.max_retries} retries. Recording failed page and continuing.")
+                failed_pages.append(page)
+                page += 1
+                time.sleep(1.0)  # small cooldown
+                continue
 
             # termination condition
             if not cards:
-                print("No more cards. Ingestion complete.")
-                done = True
-                success = True
+                print("[INFO] No more cards. Ingestion complete.")
                 break
 
             all_cards.extend(cards)
-            total = body.get("totalCount")
-            print(f"Fetching page {page}, progress ({len(all_cards)}/{total})")
+            total_count = total_count or total
 
-            time.sleep(5)
-            page += 1
-            success = True
-            break
-        
-        except requests.exceptions.HTTPError as e:
-
-            if resp.status_code in (504, 429, 404):
-                wait = 5 * (attempts + 1)
-                print(f"{resp.status_code} on page {page}. Retrying in {wait}s...")
-                time.sleep(wait)
+            if total_count:
+                print(f"[INFO] Page {page} fetched. Progress ({len(all_cards)}/{total_count})")
             else:
-                print(f"Error code {resp.status_code} on page {page}.")
-                failed_pages.append(page)
-                success = True
-                page += 1
-                break
-        
-        except requests.exceptions.RequestException as e:
-            wait = 5 * (attempts + 1)
-            print(f"Network error on page {page}: {e}. Retrying in {wait}s...")
-            time.sleep(wait)
+                print(f"[INFO] Page {page} fetched. Progress ({len(all_cards)}/unknown)")
 
-    if not success:
-        print(f"Failed to fetch page {page} after 5 retries. Skipping page")
-        failed_pages.append(page)
-        page += 1
-        time.sleep(60)
-        continue
+            page += 1
+            time.sleep(cfg.polite_sleep_seconds)
+
+    # Write raw JSON to S3
+    payload = {
+        "source": "pokemon_tcg_api",
+        "run_id": f"pokemon_tcg_ingestion_{ingestion_date}",
+        "ingestion_date": ingestion_date,
+        "extracted_at_utc": _utc_now_iso(),
+        "page_size": cfg.page_size,
+        "total_count": total_count,
+        "records": all_cards,
+    }
+
+    print(f"[INFO] Writing raw payload to s3://{cfg.bucket}/{raw_key} (cards={len(all_cards)})")
+    _s3_put_json(s3, cfg.bucket, raw_key, payload)
+
+    # Write failed pages manifest if needed
+    if failed_pages:
+        failed_payload = {
+            "source": "pokemon_tcg_api",
+            "run_id": f"pokemon_tcg_ingestion_{ingestion_date}",
+            "ingestion_date": ingestion_date,
+            "failed_pages": sorted(set(failed_pages)),
+            "extracted_at_utc": _utc_now_iso(),
+            "note": "Pages listed here failed after retries; raw output may be incomplete.",
+        }
+        print(f"[WARN] Writing failed pages manifest to s3://{cfg.bucket}/{failed_key}")
+        _s3_put_json(s3, cfg.bucket, failed_key, failed_payload)
+
+    print("[INFO] Done.")
+
+def main() -> None:
+    bucket = _require_env("S3_BUCKET")
+
+    cfg = IngestionConfig(
+        bucket=bucket,
+        raw_prefix="raw/pokemon_tcg/cards",
+        meta_prefix="meta/pokemon_tcg/failed",
+        page_size=int(os.getenv("POKEMON_TCG_PAGE_SIZE", str(DEFAULT_PAGE_SIZE))),
+        max_retries=int(os.getenv("POKEMON_TCG_MAX_RETRIES", str(DEFAULT_MAX_RETRIES))),
+        polite_sleep_seconds=float(os.getenv("POKEMON_TCG_POLITE_SLEEP_SECONDS", "0.2")),
+    )
+
+    run_full_ingestion(cfg)
 
 
-
-with open(output_path, "w", encoding="utf-8") as f:
-    json.dump(all_cards, f, indent=4, ensure_ascii=False)
-
-print(f"JSON written to: {output_path}")
-
-if failed_pages:
-    print("Failed pages: ", failed_pages)
-
-    failed_payload = {
-    "source": "pokemon_tcg_api",
-    "run_id": run_id,
-    "failed_pages": sorted(set(failed_pages)),
-    "last_updated_est": datetime.now().isoformat()
-}
-
-    with open(failed_output_path, "w", encoding="utf-8") as f:
-        json.dump(failed_payload, f, indent=4, ensure_ascii=False)
-
+if __name__ == "__main__":
+    main()
