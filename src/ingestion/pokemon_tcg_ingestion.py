@@ -132,8 +132,6 @@ def run_full_ingestion(cfg: IngestionConfig) -> None:
 
     api_key = _require_env("POKEMON_TCG_API_KEY")
 
-    #test var
-    max_test_pages = int(os.getenv("POKEMON_TCG_MAX_PAGES", "0"))
 
     raw_key = f"{cfg.raw_prefix}/ingestion_date={ingestion_date}/cards.json"
     failed_key = f"{cfg.meta_prefix}/ingestion_date={ingestion_date}/failed_pages.json"
@@ -152,10 +150,6 @@ def run_full_ingestion(cfg: IngestionConfig) -> None:
 
     with requests.Session() as session:
         while True:
-
-            if max_test_pages and page > max_test_pages:
-                print(f"[TEST MODE] Stopping after {max_test_pages} pages.")
-                break
 
             cards, total, status = _fetch_page(
                 session=session,
