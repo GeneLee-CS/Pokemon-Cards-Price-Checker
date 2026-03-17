@@ -5,24 +5,41 @@ Purpose:
 - Builds the processed card_price_variant_master dimension table from the tcg_card_prices parquet.
 - Each row represent a unique (card_id, price_variant_type) combination.
 - Deterministic BIGINT hash for price_variant_id
-- Write outputs to S3 / local processed layer in Parquet format
+- Write outputs to S3 processed layer in Parquet format.
+- Overwrites the dimension table each run.
 """
 
 from pathlib import Path
-from datetime import datetime
 import hashlib
+import logging
+
 import pandas as pd
 import pyarrow as pa
+import pyarrow.dataset as ds
+import pyarrow.fs as pafs
 import pyarrow.parquet as pq
 import yaml
 
+# ---------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-STAGING_CARDS_PATH = PROJECT_ROOT / "data" / "staging" / "pokemon_tcg" / "card_prices"
-PROCESSED_OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "card_price_variant_master"
 SCHEMA_PATH = PROJECT_ROOT / "schemas" / "processed" / "card_price_variant_master.yaml"
+
+STAGING_CARD_PRICES_PATH = "s3://pokemon-tcg-data-lake/staging/pokemon_tcg/tcg_card_prices/"
+PROCESSED_OUTPUT_PATH = "s3://pokemon-tcg-data-lake/processed/card_price_variant_master/"
 
 # ---------------------------------------------------------------------
 # Utilities
@@ -43,12 +60,47 @@ def validate_schema(df: pd.DataFrame, schema: dict) -> None:
     
     if extra_columns:
         raise ValueError(f"Unexpected columns present: {extra_columns}")
-    
-def read_staging_data(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        raise FileNotFoundError(f"Staging path does not exist: {path}")
-    
-    return pd.read_parquet(path)
+
+def align_columns_to_schema(df: pd.DataFrame, schema: dict) -> pd.DataFrame:
+    expected_columns = list(schema["columns"].keys())
+    return df[expected_columns].copy()
+
+
+def get_filesystem_and_path(uri: str):
+    fs, path = pafs.FileSystem.from_uri(uri)
+    return fs, path
+
+
+def path_exists(fs: pafs.FileSystem, path: str) -> bool:
+    info = fs.get_file_info(path)
+    return info.type != pafs.FileType.NotFound
+  
+def read_staging_data(uri: str) -> pd.DataFrame:
+    fs, path = get_filesystem_and_path(uri)
+
+    if not path_exists(fs, path):
+        raise FileNotFoundError(f"Staging path does not exist: {uri}")
+
+    logger.info("Reading staging parquet from %s", uri)
+    dataset = ds.dataset(path, filesystem=fs, format="parquet")
+    table = dataset.to_table()
+    df = table.to_pandas()
+
+    if df.empty:
+        raise ValueError(f"No records found in staging path: {uri}")
+
+    return df
+
+def clear_output_path(uri: str) -> None:
+    fs, path = get_filesystem_and_path(uri)
+
+    info = fs.get_file_info(path)
+    if info.type == pafs.FileType.NotFound:
+        logger.info("Output path does not yet exist, nothing to clear: %s", uri)
+        return
+
+    logger.info("Clearing existing output path for idempotent overwrite: %s", uri)
+    fs.delete_dir(path)
 
 def deterministic_bigint_hash(card_id: str, variant_type: str) -> int:
     """
@@ -62,6 +114,7 @@ def deterministic_bigint_hash(card_id: str, variant_type: str) -> int:
 # ---------------------------------------------------------------------
 
 def transform_card_price_variant_master(df: pd.DataFrame) -> pd.DataFrame:
+    logger.info("Transforming staged tcg_card_prices into card_price_variant_master")
 
     variant_df = df[
         [
@@ -81,7 +134,7 @@ def transform_card_price_variant_master(df: pd.DataFrame) -> pd.DataFrame:
             "card_id",
             "price_type"
         ]
-    ]
+    ].drop_duplicates(subset=["card_id", "price_type"])
 
     return variant_df
 
@@ -91,36 +144,45 @@ def transform_card_price_variant_master(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------
 
 
-def write_parquet(df: pd.DataFrame, output_path: Path) -> None:
-    output_path.mkdir(parents=True, exist_ok=True)
+def write_parquet(df: pd.DataFrame, output_uri: str) -> None:
+    fs, path = get_filesystem_and_path(output_uri)
 
-    table = pa.Table.from_pandas(df, preserve_index = False)
+    table = pa.Table.from_pandas(df, preserve_index=False)
 
-    pq.write_to_dataset(table, root_path = output_path)
-
+    logger.info("Writing card_price_variant_master parquet to %s", output_uri)
+    pq.write_to_dataset(
+        table,
+        root_path=path,
+        filesystem=fs,
+    )
 
 # ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
 
 def main() -> None:
-    print("Starting card_price_variant_master transform...")
+    logger.info("Starting card_price_variant_master transform")
 
     schema = load_schema(SCHEMA_PATH)
 
-    df_prices = read_staging_data(STAGING_CARDS_PATH)
-    print(f"Loaded {len(df_prices)} staged records")
+    df_prices = read_staging_data(STAGING_CARD_PRICES_PATH)
+    logger.info("Loaded %s staged card price records", len(df_prices))
 
     df_variant_master = transform_card_price_variant_master(df_prices)
-    print(f"Produced {len(df_variant_master)} unique price variants and generated price variant IDs")
+    logger.info(
+        "Produced %s unique card price variants",
+        len(df_variant_master),
+    )
 
     validate_schema(df_variant_master, schema)
-    print("Schema validaiton passed")
+    df_variant_master = align_columns_to_schema(df_variant_master, schema)
+    logger.info("Schema validation passed")
 
+    clear_output_path(PROCESSED_OUTPUT_PATH)
     write_parquet(df_variant_master, PROCESSED_OUTPUT_PATH)
-    print(f"card_price_variant_master written to {PROCESSED_OUTPUT_PATH}")
 
-    print("card_price_variant_master transformation complete")
+    logger.info("card_price_variant_master written to %s", PROCESSED_OUTPUT_PATH)
+    logger.info("card_price_variant_master transformation complete")
 
 
 if __name__ == "__main__":
