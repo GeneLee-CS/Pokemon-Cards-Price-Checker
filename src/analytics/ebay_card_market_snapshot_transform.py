@@ -8,25 +8,77 @@ Purpose:
 
 Notes:
 - Partitioned by ingestion_date
-- Append-only table
-
+- Append-only table unless --force is supplied
 """
 
+from __future__ import annotations
+
+import logging
 from pathlib import Path
+from typing import Dict, Any, List
+
+import boto3
+import fsspec
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
+
+from src.utils.run_context import RunContext, build_parser
+from src.utils.s3_paths import S3Paths
+from src.utils.s3_partitions import partition_exists, split_s3_uri
+
+logger = logging.getLogger(__name__)
 
 # -------------------------------------------------
 # Paths 
 # -------------------------------------------------
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCHEMA_PATH = PROJECT_ROOT / "schemas" / "analytics" / "ebay_card_market_snapshot.yaml"
 
-STAGING_PATH = (PROJECT_ROOT / "data" / "staging" / "ebay" / "listings")
-ANALYTICS_PATH = (PROJECT_ROOT / "data" / "analytics" / "ebay_market_snapshot")
-SCHEMA_PATH = (PROJECT_ROOT / "schemas" / "analytics" / "ebay_card_market_snapshot.yaml")
+# -------------------------------------------------
+# S3 helpers
+# -------------------------------------------------
+
+def list_s3_parquet_files(partition_s3_uri: str) -> List[str]:
+    bucket, prefix = split_s3_uri(partition_s3_uri)
+    client = boto3.client("s3")
+
+    paginator = client.get_paginator("list_objects_v2")
+    out: List[str] = []
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if key.endswith(".parquet"):
+                out.append(f"s3://{bucket}/{key}")
+
+    return sorted(out)
+
+
+def delete_s3_prefix(prefix_s3_uri: str) -> int:
+    bucket, prefix = split_s3_uri(prefix_s3_uri)
+    client = boto3.client("s3")
+    paginator = client.get_paginator("list_objects_v2")
+
+    deleted = 0
+    batch: List[Dict[str, str]] = []
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            batch.append({"Key": obj["Key"]})
+
+            if len(batch) == 1000:
+                client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+                deleted += len(batch)
+                batch = []
+
+    if batch:
+        client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+        deleted += len(batch)
+
+    return deleted
 
 
 # -------------------------------------------------
@@ -79,90 +131,95 @@ def transform_ebay_card_market_snapshot(df: pd.DataFrame) -> pd.DataFrame:
 
     return analytics_df
 
+def write_snapshot_parquet(df: pd.DataFrame, output_s3_uri: str) -> None:
+    table = pa.Table.from_pandas(df, preserve_index=False)
+    output_file = f"{output_s3_uri.rstrip('/')}/part-000.parquet"
+
+    with fsspec.open(output_file, "wb") as f:
+        pq.write_table(table, f)
 
 # -------------------------------------------------
 # Main
 # -------------------------------------------------
 
-def main() -> None:
+def parse_args():
+    parser = build_parser("Build eBay card market snapshot from staging eBay listings.")
+    return parser.parse_args()
 
-    if not STAGING_PATH.exists():
-        raise FileNotFoundError(f"Staging path does not exist: {STAGING_PATH}")
-    
-    # ---------------------------------------------------------------
-    # Select latest price_date (TCG week)
-    # ---------------------------------------------------------------
-    price_date_dirs = sorted(
-        STAGING_PATH.glob("price_date=*"),
-        key=lambda p: p.name.split("=")[1]
+def main(run_ctx: RunContext) -> None:
+    paths = S3Paths(bucket=run_ctx.bucket)
+
+    staging_partition = paths.staging_ebay_listings_partition(
+        price_date=run_ctx.price_date,
+        ingestion_date=run_ctx.ingestion_date,
+    )
+    output_partition = paths.analytics_ebay_market_snapshot_partition(
+        price_date=run_ctx.price_date,
+        ingestion_date=run_ctx.ingestion_date,
     )
 
-    if not price_date_dirs:
-        raise RuntimeError("No price_date partitions found in eBay staging data.")
-    
-    latest_price_date_dir = price_date_dirs[-1]
-    latest_price_date = latest_price_date_dir.name.split("=")[1]
-
-    # ---------------------------------------------------------------
-    # Select latest ingestion_date within the price_date
-    # ---------------------------------------------------------------
-    ingestion_date_dirs = sorted(
-        latest_price_date_dir.glob("ingestion_date=*"),
-        key=lambda p: p.name.split("=")[1]
+    logger.info(
+        "Starting eBay market snapshot transform | bucket=%s | price_date=%s | ingestion_date=%s | run_id=%s",
+        run_ctx.bucket,
+        run_ctx.price_date_str,
+        run_ctx.ingestion_date_str,
+        run_ctx.run_id,
     )
 
-    if not ingestion_date_dirs:
-        raise RuntimeError(f"No ingestion_date partitions found under {latest_price_date_dir}")
-    
-    latest_ingestion_dir = ingestion_date_dirs[-1]
-    ingestion_date = latest_ingestion_dir.name.split("=")[1]
+    if not partition_exists(staging_partition):
+        raise FileNotFoundError(f"Staging partition not found: {staging_partition}")
 
-    print(
-        f"Processing eBay snapshot for "
-        f"price_date={latest_price_date}, "
-        f"ingestion_date={ingestion_date}"
-    )
+    if partition_exists(output_partition):
+        if run_ctx.force:
+            logger.warning(
+                "Existing analytics partition found and --force supplied. Deleting: %s",
+                output_partition,
+            )
+            deleted_count = delete_s3_prefix(output_partition)
+            logger.info("Deleted %d existing objects from %s", deleted_count, output_partition)
+        else:
+            raise FileExistsError(
+                f"Analytics snapshot partition already exists: {output_partition}. "
+                f"Re-run with --force to replace it."
+            )
 
-    # ---------------------------------------------------------------
-    # Read parquet files and transform
-    # ---------------------------------------------------------------
+    parquet_files = list_s3_parquet_files(staging_partition)
+    if not parquet_files:
+        raise FileNotFoundError(f"No parquet files found under {staging_partition}")
 
-    dfs: list[pd.DataFrame] = []
+    logger.info("Found %d staging parquet files under %s", len(parquet_files), staging_partition)
 
-    for parquet_file in latest_ingestion_dir.glob("*.parquet"):
-        df = pd.read_parquet(parquet_file)
-        df["ingestion_date"] = ingestion_date
+    dfs: List[pd.DataFrame] = []
+    for parquet_file in parquet_files:
+        with fsspec.open(parquet_file, "rb") as f:
+            df = pd.read_parquet(f)
         dfs.append(df)
 
-    if not dfs:
-        raise RuntimeError("No parquet files found for latest eBay snapshot.")
-    
     staging_df = pd.concat(dfs, ignore_index=True)
 
     analytics_df = transform_ebay_card_market_snapshot(staging_df)
 
-    required_columns = load_schema(SCHEMA_PATH)
-    validate_schema(analytics_df, required_columns)
+    schema = load_schema(SCHEMA_PATH)
+    validate_schema(analytics_df, schema)
 
     if analytics_df.empty:
-        print("No valid eBay listings after filtering")
+        logger.warning("No valid eBay listings after filtering")
         return
-    
-    # ---------------------------------------------------------------
-    # Output
-    # ---------------------------------------------------------------
-    
-    output_dir = ANALYTICS_PATH / f"ingestion_date={ingestion_date}"
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    table = pa.Table.from_pandas(analytics_df, preserve_index=False)
-    pq.write_table(table, output_dir / "part-000.parquet")
+    if run_ctx.dry_run:
+        logger.info("DRY RUN | would write %d rows to %s", len(analytics_df), output_partition)
+        return
 
-    print(
-        f"Succesfully wrote eBay card market snapshot: "
-        f"{len(analytics_df)} rows"
+    write_snapshot_parquet(analytics_df, output_partition)
+
+    logger.info(
+        "Successfully wrote eBay card market snapshot | rows=%d | path=%s",
+        len(analytics_df),
+        output_partition,
     )
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    run_ctx = RunContext.from_args(args)
+    main(run_ctx)
