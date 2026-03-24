@@ -27,28 +27,80 @@ Matching confidence:
 
 from __future__ import annotations
 
+import io
 import json
+import logging
 import re
-from pathlib import Path
 from typing import Dict, Any, Optional, List
 
+import boto3
+import fsspec
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from src.utils.latest_top_tcg_week_date import get_latest_price_date
 from src.processing.ebay_filters import is_non_card_listing
+from src.utils.run_context import RunContext, build_parser
+from src.utils.s3_paths import S3Paths
+from src.utils.s3_partitions import partition_exists, split_s3_uri
 
+logger = logging.getLogger(__name__)
 
 # -------------------------------------------------
-# Paths 
+# S3 helpers
 # -------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+def list_s3_json_files(partition_s3_uri: str) -> List[str]:
+    """
+    Return full s3:// URIs for all .json objects directly under a partition prefix.
+    """
+    bucket, prefix = split_s3_uri(partition_s3_uri)
+    client = boto3.client("s3")
 
-CARD_MASTER_PATH = PROJECT_ROOT / "data" / "processed" / "card_master"
-RAW_EBAY_PATH = PROJECT_ROOT / "data" / "raw" / "ebay" / "listings"
-STAGING_OUTPUT_PATH = PROJECT_ROOT / "data" / "staging" / "ebay" / "listings"
+    paginator = client.get_paginator("list_objects_v2")
+    out: List[str] = []
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if key.endswith(".json"):
+                out.append(f"s3://{bucket}/{key}")
+
+    return sorted(out)
+
+
+def delete_s3_prefix(prefix_s3_uri: str) -> int:
+    """
+    Delete all objects under an S3 prefix. Used only when --force is supplied.
+    Returns number of deleted objects.
+    """
+    bucket, prefix = split_s3_uri(prefix_s3_uri)
+    client = boto3.client("s3")
+    paginator = client.get_paginator("list_objects_v2")
+
+    deleted = 0
+    batch: List[Dict[str, str]] = []
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            batch.append({"Key": obj["Key"]})
+
+            if len(batch) == 1000:
+                client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+                deleted += len(batch)
+                batch = []
+
+    if batch:
+        client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+        deleted += len(batch)
+
+    return deleted
+
+
+def load_card_master(paths: S3Paths) -> pd.DataFrame:
+    path = paths.processed_card_master_root()
+    logger.info("Loading card_master from %s", path)
+    return pd.read_parquet(path)
 
 # -------------------------------------------------
 # Normalization helpers
@@ -167,7 +219,7 @@ def transform_listing(
 
     # Ignoring listings that are not Pokemon cards
     if is_non_card_listing(title_normalized):
-        print(f"Listing rejected: {raw_title}")
+        logger.debug("Listing rejected by non-card filter: %s", raw_title)
         return None
     
     canonical_name = card_row["card_name"]
@@ -229,54 +281,115 @@ def transform_listing(
         "title_match_confidence": title_match_confidence
     }
 
+def write_staging_parquet_to_s3(df: pd.DataFrame, output_s3_uri: str) -> None:
+    """
+    Write a single parquet file to S3.
+    """
+    table = pa.Table.from_pandas(df, preserve_index=False)
+    output_file = f"{output_s3_uri.rstrip('/')}/part-000.parquet"
+
+    with fsspec.open(output_file, "wb") as f:
+        pq.write_table(table, f)
+
 
 # -------------------------------------------------
 # Main
 # -------------------------------------------------
 
-def main(price_date: str, ingestion_date: str) -> None:
-    # Load card_master
-    card_master_files = sorted(CARD_MASTER_PATH.glob("*.parquet"))
-    if not card_master_files:
-        raise FileNotFoundError(f"No parquet files under {CARD_MASTER_PATH}")
-    
-    card_master_df = pd.read_parquet(card_master_files[0])
+def parse_args():
+    parser = build_parser("Transform raw eBay Browse API JSON into staging ebay_listings.")
+    return parser.parse_args()
+
+def main(run_ctx: RunContext) -> None:
+    paths = S3Paths(bucket=run_ctx.bucket)
+
+    raw_partition = paths.raw_ebay_listings_partition(
+        price_date=run_ctx.price_date,
+        ingestion_date=run_ctx.ingestion_date,
+    )
+    output_partition = paths.staging_ebay_listings_partition(
+        price_date=run_ctx.price_date,
+        ingestion_date=run_ctx.ingestion_date,
+    )
+
+    logger.info(
+        "Starting eBay staging transform | bucket=%s | price_date=%s | ingestion_date=%s | run_id=%s",
+        run_ctx.bucket,
+        run_ctx.price_date_str,
+        run_ctx.ingestion_date_str,
+        run_ctx.run_id,
+    )
+
+    if not partition_exists(raw_partition):
+        raise FileNotFoundError(f"Raw eBay partition not found: {raw_partition}")
+
+    if partition_exists(output_partition):
+        if run_ctx.force:
+            logger.warning("Existing staging partition found and --force supplied. Deleting: %s", output_partition)
+            deleted_count = delete_s3_prefix(output_partition)
+            logger.info("Deleted %d existing objects from %s", deleted_count, output_partition)
+        else:
+            raise FileExistsError(
+                f"Staging eBay partition already exists: {output_partition}. "
+                f"Re-run with --force to replace it."
+            )
+
+    card_master_df = load_card_master(paths)
 
     required_cols = {"card_id", "card_name", "card_number", "set_name"}
-    
-    card_master_lookup = card_master_df.set_index("card_id").to_dict("index")
+    missing_cols = required_cols - set(card_master_df.columns)
+    if missing_cols:
+        raise ValueError(f"card_master missing required columns: {missing_cols}")
 
-    base_path = (RAW_EBAY_PATH / f"price_date={price_date}" / f"ingestion_date={ingestion_date}")
-    if not base_path.exists():
-        raise FileNotFoundError(f"raw path not found :{base_path}")
-    
+    card_master_lookup = (
+        card_master_df[list(required_cols)]
+        .drop_duplicates(subset=["card_id"])
+        .set_index("card_id")
+        .to_dict("index")
+    )
+
+    json_files = list_s3_json_files(raw_partition)
+    if not json_files:
+        raise FileNotFoundError(f"No raw JSON files found under {raw_partition}")
+
+    logger.info("Found %d raw JSON files under %s", len(json_files), raw_partition)
+
     rows: List[Dict[str, Any]] = []
     rejected_count = 0
+    skipped_missing_card_master = 0
+    empty_payload_count = 0
 
-    for json_file in base_path.glob("*.json"):
-        card_id = json_file.stem 
+    for json_file in json_files:
+        card_id = json_file.rsplit("/", 1)[-1].replace(".json", "")
 
         card_row = card_master_lookup.get(card_id)
         if not card_row:
+            skipped_missing_card_master += 1
+            logger.warning("Skipping raw file with missing card_master row | card_id=%s | file=%s", card_id, json_file)
             continue
 
         card_row = dict(card_row)
         card_row["card_id"] = card_id
 
-        with open(json_file, "r", encoding="utf-8") as f:
+        with fsspec.open(json_file, "r") as f:
             raw_json = json.load(f)
+
+        if not isinstance(raw_json, dict):
+            logger.warning("Skipping malformed raw JSON (expected dict) | file=%s", json_file)
+            continue
 
         items = raw_json.get("itemSummaries", [])
         if not items:
+            empty_payload_count += 1
             continue
 
         for item_summary in items:
             row = transform_listing(
-                    item_summary=item_summary,
-                    card_row=card_row,
-                    price_date=price_date,
-                    ingestion_date=ingestion_date
-                )
+                item_summary=item_summary,
+                card_row=card_row,
+                price_date=run_ctx.price_date_str,
+                ingestion_date=run_ctx.ingestion_date_str,
+            )
             if row is None:
                 rejected_count += 1
                 continue
@@ -284,33 +397,30 @@ def main(price_date: str, ingestion_date: str) -> None:
             rows.append(row)
 
     if not rows:
-        print("No listings processed")
+        logger.warning(
+            "No listings processed | skipped_missing_card_master=%d | rejected_non_card=%d | empty_payload_count=%d",
+            skipped_missing_card_master,
+            rejected_count,
+            empty_payload_count,
+        )
         return
-    
+
     df = pd.DataFrame(rows)
-    
-    print(f"Accepted rows: {len(df)}")
-    print(f"Rejected rows: {rejected_count}")
 
-    table = pa.Table.from_pandas(df, preserve_index = False)
-    output_path = STAGING_OUTPUT_PATH / f"price_date={price_date}" / f"ingestion_date={ingestion_date}"
-    output_path.mkdir(parents=True, exist_ok=True)
+    logger.info("Accepted rows: %d", len(df))
+    logger.info("Rejected non-card rows: %d", rejected_count)
+    logger.info("Skipped missing card_master rows: %d", skipped_missing_card_master)
+    logger.info("Empty payload files: %d", empty_payload_count)
 
-    pq.write_table(table, output_path / "part-000.parquet")
-    print(f"Wrote {len(df)} rows to {output_path}")
+    if run_ctx.dry_run:
+        logger.info("DRY RUN | would write %d rows to %s", len(df), output_partition)
+        return
+
+    write_staging_parquet_to_s3(df, output_partition)
+    logger.info("Wrote %d rows to %s", len(df), output_partition)
+
 
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) != 2:
-        raise ValueError(
-            "Usage: python ebay_staging_transform.py <ingestion_date>"
-        )
-    
-    ingestion_date = sys.argv[1]
-
-    price_date = get_latest_price_date()
-
-    print(f"Using price_date={price_date} for ingestion_date={ingestion_date}")
-    
-    main(price_date=price_date, ingestion_date=ingestion_date)
+    args = parse_args()
+    run_ctx = RunContext.from_args(args)
+    main(run_ctx)
