@@ -21,4 +21,7 @@ data/
 # testing_script
 scripts/
 
+# EC2 .pem
+pokemon-api-key.pem
+
 
