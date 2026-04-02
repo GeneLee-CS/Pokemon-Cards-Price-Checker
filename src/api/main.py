@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from typing import Literal
 from fastapi import FastAPI, Query, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.services.search_service import search_cards
 from src.services.card_service import fetch_card_detail
@@ -23,6 +24,17 @@ async def lifespan(app: FastAPI):
             pass
 
 app = FastAPI(title="Pokemon TCG API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 def _get_con(request: Request):
     return request.app.state.duckdb_con
