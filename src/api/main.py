@@ -66,7 +66,7 @@ def card_listings(
     request: Request,
     card_id: str,
     sort: Literal["price_asc", "price_desc"] = "price_asc",
-    limit: int = Query(20, ge=1, le=50),
+    limit: int = Query(20, ge=1, le=200),
 ):
     result = fetch_card_listings(_get_con(request), card_id, sort, limit)
 
