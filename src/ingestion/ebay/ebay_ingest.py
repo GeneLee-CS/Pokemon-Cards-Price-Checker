@@ -337,7 +337,7 @@ def parse_args():
     parser.add_argument(
         "--page-size",
         type=int,
-        default=50,
+        default=200,
         help="Browse API page size per request. Default: 50.",
     )
     parser.add_argument(
