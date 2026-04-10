@@ -265,6 +265,10 @@ def fetch_all_items_for_card(
         if len(all_items) >= config.max_results_per_card:
             break
 
+
+        if config.page_size >= config.max_results_per_card and int(params["offset"]) > 0:
+            break
+
         limit = min(int(params["limit"]), config.max_results_per_card - len(all_items))
 
         payload = search_items_with_retry(
