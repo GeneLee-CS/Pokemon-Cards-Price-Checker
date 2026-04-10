@@ -407,7 +407,16 @@ def main(run_ctx: RunContext) -> None:
 
     df = pd.DataFrame(rows)
 
-    logger.info("Accepted rows: %d", len(df))
+    pre_dedupe_count = len(df)
+
+    # Deduplicate overlapping listings caused by pagination drift
+    df = df.drop_duplicates(subset=["listing_id"], keep="first").reset_index(drop=True)
+
+    deduped_count = pre_dedupe_count - len(df)
+
+    logger.info("Accepted rows before dedupe: %d", pre_dedupe_count)
+    logger.info("Duplicate listing_ids removed: %d", deduped_count)
+    logger.info("Final accepted rows after dedupe: %d", len(df))
     logger.info("Rejected non-card rows: %d", rejected_count)
     logger.info("Skipped missing card_master rows: %d", skipped_missing_card_master)
     logger.info("Empty payload files: %d", empty_payload_count)
