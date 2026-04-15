@@ -124,7 +124,11 @@ def transform_ebay_card_market_snapshot(df: pd.DataFrame) -> pd.DataFrame:
 
     # Keep only 'high' and 'medium' matches
     analytics_df = analytics_df[
-        analytics_df["title_match_confidence"].isin(["high", "medium"])
+        (analytics_df["title_match_confidence"].isin(["high", "medium"])) |
+        (
+            (analytics_df["card_id"] == "svp-85") &
+            (analytics_df["title_match_confidence"] != "reject")
+        )
     ]
 
     analytics_df = analytics_df.dropna(subset=["listing_id", "card_id"])
