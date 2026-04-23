@@ -143,7 +143,7 @@ def build_weekly_top_tcg_cards(price_date: str) -> pd.DataFrame:
         price_df.groupby("card_id", as_index=False)
         .agg(max_market_price=("market_price", "max"))
         .sort_values(["max_market_price", "card_id"], ascending=[False, True])
-        .head(200)
+        .head(1000)
         .reset_index(drop=True)
     )
 
