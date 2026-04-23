@@ -48,7 +48,7 @@ class IngestConfig:
     def __init__(
         self,
         *,
-        top_n_cards: int = 10,
+        top_n_cards: int = 300,
         page_size: int = 200,
         max_results_per_card: int = 200,
         max_pages: int = 10,
