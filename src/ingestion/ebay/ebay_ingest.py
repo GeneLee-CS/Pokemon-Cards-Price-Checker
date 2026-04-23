@@ -335,8 +335,8 @@ def parse_args():
     parser.add_argument(
         "--top-n-cards",
         type=int,
-        default=10,
-        help="Number of top cards from weekly_top_tcg_cards to query on eBay. Default: 10.",
+        default=300,
+        help="Number of top cards from weekly_top_tcg_cards to query on eBay. Default: 300.",
     )
     parser.add_argument(
         "--page-size",
