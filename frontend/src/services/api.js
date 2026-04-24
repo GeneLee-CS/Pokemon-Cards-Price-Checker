@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://3.134.81.19";
+const API_BASE_URL = "http://3.19.242.117";
 
 export async function searchCards(query) {
   const response = await fetch(
