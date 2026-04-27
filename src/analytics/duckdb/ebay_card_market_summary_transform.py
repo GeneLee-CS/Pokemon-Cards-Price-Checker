@@ -1,10 +1,6 @@
 from src.analytics.duckdb.duckdb_client import get_connection
 
 def build_ebay_card_market_summary(con):
-    """
-    Builds card-level eBay market summary aligned to the latest TCG price_date
-    """
-
     con.execute(
         """
         CREATE TABLE IF NOT EXISTS ebay_card_market_summary (
@@ -16,7 +12,17 @@ def build_ebay_card_market_summary(con):
             max_price DOUBLE,
             graded_listing_count BIGINT,
             ungraded_listing_count BIGINT
-            );
+        );
+        """
+    )
+
+    con.execute(
+        """
+        DELETE FROM ebay_card_market_summary
+        WHERE price_date = (
+            SELECT MAX(price_date)
+            FROM weekly_top_tcg_cards
+        );
         """
     )
 
@@ -25,43 +31,37 @@ def build_ebay_card_market_summary(con):
         WITH latest_week AS (
             SELECT MAX(price_date) AS price_date
             FROM weekly_top_tcg_cards
-            ),
-            latest_snapshot AS(
-                SELECT MAX(ingestion_date) AS ingestion_date
-                FROM ebay_market_snapshot
-            ),
-            aggregated AS (
-                SELECT
-                    card_id,
-                    count(*) AS listing_count,
-                    MIN(price_value) AS min_price,
-                    quantile_cont(price_value, 0.5) AS median_price,
-                    MAX(price_value) AS max_price,
-                    SUM(CASE WHEN COALESCE(is_graded, FALSE) THEN 1 ELSE 0 END) AS graded_listing_count,
-                    SUM(CASE WHEN NOT COALESCE(is_graded, FALSE) THEN 1 ELSE 0 END) AS ungraded_listing_count
-                FROM ebay_market_snapshot
-                WHERE currency = 'USD'
-                    AND ingestion_date = (SELECT ingestion_date FROM latest_snapshot)
-                GROUP BY card_id
-                )
-        INSERT INTO ebay_card_market_summary
+        ),
+        latest_snapshot AS (
+            SELECT MAX(ingestion_date) AS ingestion_date
+            FROM ebay_market_snapshot
+        ),
+        aggregated AS (
             SELECT
-                a.card_id,
-                l.price_date,
-                a.listing_count,
-                a.min_price,
-                a.median_price,
-                a.max_price,
-                a.graded_listing_count,
-                a.ungraded_listing_count
-            FROM aggregated a
-            CROSS JOIN latest_week l
-            WHERE NOT EXISTS(
-                SELECT 1
-                FROM ebay_card_market_summary e
-                where e.price_date = l.price_date
-                    AND e.card_id = a.card_id
-                );
+                card_id,
+                COUNT(*) AS listing_count,
+                MIN(price_value) AS min_price,
+                quantile_cont(price_value, 0.5) AS median_price,
+                MAX(price_value) AS max_price,
+                SUM(CASE WHEN COALESCE(is_graded, FALSE) THEN 1 ELSE 0 END) AS graded_listing_count,
+                SUM(CASE WHEN NOT COALESCE(is_graded, FALSE) THEN 1 ELSE 0 END) AS ungraded_listing_count
+            FROM ebay_market_snapshot
+            WHERE currency = 'USD'
+              AND ingestion_date = (SELECT ingestion_date FROM latest_snapshot)
+            GROUP BY card_id
+        )
+        INSERT INTO ebay_card_market_summary
+        SELECT
+            a.card_id,
+            l.price_date,
+            a.listing_count,
+            a.min_price,
+            a.median_price,
+            a.max_price,
+            a.graded_listing_count,
+            a.ungraded_listing_count
+        FROM aggregated a
+        CROSS JOIN latest_week l;
         """
     )
 
