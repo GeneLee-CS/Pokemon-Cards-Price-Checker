@@ -21,6 +21,7 @@ NON_CARD_KEYWORDS = {
     "fan made",
     "fan-made",
     "fanmade",
+    "blind box",
 
     # proxy-style foil language
     "gold foil",
