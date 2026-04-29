@@ -38,12 +38,12 @@ React Frontend (User UI)
 ### Data Architecture (S3 Data Lake)
 
 #### Raw Layer (TCG)
-Source: Pokemon TCG API
-Format: JSON
-Partitioned by: ingestion_date=YYYY-MM-DD
+Source: Pokemon TCG API  
+Format: JSON  
+Partitioned by: ingestion_date=YYYY-MM-DD  
 - Stores full API payload + ingestion metadata in S3
 
 #### Staging Layer (TCG)
-Format: Parquet
-Tables: `tcg_cards`, `tcg_card_prices`
+Format: Parquet  
+Tables: `tcg_cards`, `tcg_card_prices`  
 - Flattens JSON, normalize schema and validates YAML contracts
