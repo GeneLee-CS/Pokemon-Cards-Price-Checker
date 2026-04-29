@@ -81,5 +81,26 @@ Partitioned by: price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD
 - Normalizes title, confidence scoring, keyword filtering and applies card matching logic
 
 #### Analytics Layer (eBay)
-`ebay_market_snapshot`: Cleaned listing dataset, partitioned by price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD  
+`ebay_market_snapshot`: Cleaned listing dataset, partitioned by price_date, ingestion_date
 `ebay_card_market_summary`: Aggregated metrics (listing count, min/max/median price, graded/ungraded counts)
+
+#### Analytics Layer (DuckDB)
+- Reads parquets directly from S3
+- Registers datasets as views
+- Builds derived tables (`ebay_card_market_summary`)
+
+## API Layer (FastAPI)
+
+### Endpoints
+
+`/search`
+- Search cards by name
+- Returns metadata + image URL
+
+`/cards/{card_id}`
+- Returns card metadata, latest TCG price, price history, eBay market summary
+
+`/cards/{card_id}/listings`
+- Returns listing-level data
+- Supports sorting and limits
+
