@@ -53,7 +53,7 @@ Tables: `tcg_cards`, `tcg_card_prices`
 
 #### Processed Layer (TCG)
 Dimension Tables:  
-`card_master`: Card metadata (Name, Set, Rarity, Images)
+`card_master`: Card metadata  
 `card_price_variant_master`: Unique (card_id, price_type) combinations  
   
 Fact Tables:
@@ -67,4 +67,19 @@ Tables: `weekly_top_tcg_cards`
 
 ### eBay Pipeline
 
-#### Raw Layer (TCG)
+#### Raw Layer (eBay)
+Source: eBay Browse API  
+Format: JSON  
+Partitioned by: price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD
+- Queries the API based on top N cards from `weekly_top_tcg_cards`, full API payload stored in S3
+
+
+#### Staging Layer (eBay)
+Format: Parquet
+Partitioned by: price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD
+- Extracts title, price, condition, URL, currency, images
+- Normalizes title, confidence scoring, keyword filtering and applies card matching logic
+
+#### Analytics Layer (eBay)
+`ebay_market_snapshot`: Cleaned listing dataset, partitioned by price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD  
+`ebay_card_market_summary`: Aggregated metrics (listing count, min/max/median price, graded/ungraded counts)
