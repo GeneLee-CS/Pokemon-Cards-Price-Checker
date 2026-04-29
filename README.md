@@ -35,7 +35,10 @@ FastAPI Backend (EC2)
 React Frontend (User UI)
 ```
 
-### Data Architecture (S3 Data Lake)
+## Data Architecture (S3 Data Lake)
+
+
+### TCG Pipeline
 
 #### Raw Layer (TCG)
 Source: Pokemon TCG API  
@@ -47,3 +50,21 @@ Partitioned by: ingestion_date=YYYY-MM-DD
 Format: Parquet  
 Tables: `tcg_cards`, `tcg_card_prices`  
 - Flattens JSON, normalize schema and validates YAML contracts
+
+#### Processed Layer (TCG)
+Dimension Tables:  
+`card_master`: Card metadata (Name, Set, Rarity, Images)
+`card_price_variant_master`: Unique (card_id, price_type) combinations  
+  
+Fact Tables:
+`tcg_price_history`: Append only, tracks weekly TCG market price
+- Grain: (card_id, price_variant_id, price_date)
+
+#### Analytics Layer (TCG)
+Tables: `weekly_top_tcg_cards`
+- Top N cards for latest TCG ingestion based on MAX(market_price) across variants
+
+
+### eBay Pipeline
+
+#### Raw Layer (TCG)
