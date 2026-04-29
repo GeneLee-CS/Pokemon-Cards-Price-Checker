@@ -4,10 +4,11 @@ An end-to-end data engineering project that tracks Pokémon card market value by
 ## Website: https://pokepricechecker.com/
 ---
 
-## Infrastructure
+## Tech Stack
+- Python (Pandas, PyArrow, FastAPI)
+- SQL/DuckDB
 - AWS S3 → Data lake
 - EC2 → API hosting
-- DuckDB → Analytics engine
 - React + Vite → Frontend
 - Airflow → Orchestration
 
@@ -80,14 +81,14 @@ Partitioned by: price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD
 - Queries the API based on top N cards from `weekly_top_tcg_cards`, full API payload stored in S3
 
 
-#### Staging Layer (eBay)
+#### Staging Layer (eBay, Data quality & matching)
 Format: Parquet
 Partitioned by: price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD
 - Extracts title, price, condition, URL, currency, images
 - Normalizes title, confidence scoring, keyword filtering and applies card matching logic
 
 #### Analytics Layer (eBay)
-`ebay_market_snapshot`: Cleaned listing dataset, partitioned by price_date, ingestion_date
+`ebay_market_snapshot`: Cleaned listing dataset, partitioned by price_date, ingestion_date  
 `ebay_card_market_summary`: Aggregated metrics (listing count, min/max/median price, graded/ungraded counts)
 
 #### Analytics Layer (DuckDB)
@@ -117,3 +118,17 @@ Partitioned by: price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD
 - Card detail page
 - Price trend visualization
 - eBay listings with sorting, pagination, direct links
+
+## Orchestration (Airflow)
+Docker-based local setup, with the following 2 DAGs:
+
+`tcg_refresh_pipeline`:
+- TCG API ingestion
+- Transformations (staging → processed → analytics)
+- Writes to S3
+
+`ebay_refresh_pipeline`:
+- eBay Browse API ingestion
+- Transformation (staging → processed → analytics)
+- Summary table refresh (DuckDB)
+- EC2 FastAPI refresh
