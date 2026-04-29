@@ -4,6 +4,12 @@ An end-to-end data engineering project that tracks Pokémon card market value by
 ## Website: https://pokepricechecker.com/
 ---
 
+## Infrastructure
+- AWS S3 → Data lake
+- EC2 → API hosting
+- DuckDB → Analytics engine
+- React + Vite → Frontend
+- Airflow → Orchestration
 
 ## Architecture
 
@@ -104,3 +110,10 @@ Partitioned by: price_date=YYYY-MM-DD, ingestion_date=YYYY-MM-DD
 - Returns listing-level data
 - Supports sorting and limits
 
+## Frontend (React + Vite)
+
+#### Features
+- Autocomplete search
+- Card detail page
+- Price trend visualization
+- eBay listings with sorting, pagination, direct links
