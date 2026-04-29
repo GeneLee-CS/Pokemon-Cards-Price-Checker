@@ -10,7 +10,7 @@ An end-to-end data engineering project that tracks Pokémon card market value by
 ### High-Level Flow
 
 ```text
-Pokémon TCG API (Weekly)
+Pokémon TCG API (Weekly) + Backfill
         ↓
 Raw Layer (S3 JSON)
         ↓        
@@ -36,3 +36,14 @@ React Frontend (User UI)
 ```
 
 ### Data Architecture (S3 Data Lake)
+
+#### Raw Layer (TCG)
+Source: Pokemon TCG API
+Format: JSON
+Partitioned by: ingestion_date=YYYY-MM-DD
+- Stores full API payload + ingestion metadata in S3
+
+#### Staging Layer (TCG)
+Format: Parquet
+Tables: `tcg_cards`, `tcg_card_prices`
+- Flattens JSON, normalize schema and validates YAML contracts
