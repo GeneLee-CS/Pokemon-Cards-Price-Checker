@@ -1,4 +1,4 @@
-# Pokémon Card Price Tracker
+# Pokémon TCG Market Analytics Platform
 An end-to-end data engineering project that tracks Pokémon card market value by combining two data sources, Pokémon TCG API for authoritative weekly market price, and eBay Browse API for current active listings and market conditions. The project builds a complete data pipeline from ingestion to analytics, and exposes the data through a FastAPI backend and a React frontend.
 
 ## Website: https://pokepricechecker.com/
