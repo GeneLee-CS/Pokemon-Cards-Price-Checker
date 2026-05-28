@@ -19,6 +19,8 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+import logging
+import sys
 
 import boto3
 import requests
@@ -35,6 +37,15 @@ DEFAULT_PAGE_SIZE = 200  # API supports up to 250
 DEFAULT_MAX_RETRIES = 5
 
 RETRYABLE_STATUS_CODES = {429, 404, 500, 502, 503, 504}
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    stream=sys.stdout,
+    force=True,
+)
+
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class IngestionConfig:
@@ -98,7 +109,7 @@ def _fetch_page(
 
             if status in RETRYABLE_STATUS_CODES:
                 wait = 2 * (attempt + 1)
-                print(f"[WARN] {status} on page {page}. Retrying in {wait}s (attempt {attempt+1}/{max_retries})...")
+                logger.warning(f"{status} on page {page}. Retrying in {wait}s (attempt {attempt+1}/{max_retries})...")
                 time.sleep(wait)
                 continue
 
@@ -111,7 +122,7 @@ def _fetch_page(
 
         except requests.exceptions.RequestException as e:
             wait = 2 * (attempt + 1)
-            print(f"[WARN] Network/HTTP error on page {page}: {e}. Retrying in {wait}s (attempt {attempt+1}/{max_retries})...")
+            logger.warning(f"Network/HTTP error on page {page}: {e}. Retrying in {wait}s (attempt {attempt+1}/{max_retries})...")
             time.sleep(wait)
 
     # Failed after retries
@@ -139,7 +150,7 @@ def run_full_ingestion(cfg: IngestionConfig) -> None:
     s3 = _s3_client()
 
     if _s3_head_exists(s3, cfg.bucket, raw_key):
-        print(f"[INFO] Raw output already exists. Skipping: s3://{cfg.bucket}/{raw_key}")
+        logger.info(f"Raw output already exists. Skipping: s3://{cfg.bucket}/{raw_key}")
         return
 
     failed_pages: List[int] = []
@@ -161,7 +172,7 @@ def run_full_ingestion(cfg: IngestionConfig) -> None:
             )
 
             if cards is None:
-                print(f"[ERROR] Failed to fetch page {page} after {cfg.max_retries} retries. Recording failed page and continuing.")
+                logger.error(f"Failed to fetch page {page} after {cfg.max_retries} retries. Recording failed page and continuing.")
                 failed_pages.append(page)
                 page += 1
                 time.sleep(1.0)  # small cooldown
@@ -169,16 +180,16 @@ def run_full_ingestion(cfg: IngestionConfig) -> None:
 
             # termination condition
             if not cards:
-                print("[INFO] No more cards. Ingestion complete.")
+                logger.info("No more cards. Ingestion complete.")
                 break
 
             all_cards.extend(cards)
             total_count = total_count or total
 
             if total_count:
-                print(f"[INFO] Page {page} fetched. Progress ({len(all_cards)}/{total_count})")
+                logger.info(f"Page {page} fetched. Progress ({len(all_cards)}/{total_count})")
             else:
-                print(f"[INFO] Page {page} fetched. Progress ({len(all_cards)}/unknown)")
+                logger.info(f"Page {page} fetched. Progress ({len(all_cards)}/unknown)")
 
             page += 1
             time.sleep(cfg.polite_sleep_seconds)
@@ -194,7 +205,7 @@ def run_full_ingestion(cfg: IngestionConfig) -> None:
         "records": all_cards,
     }
 
-    print(f"[INFO] Writing raw payload to s3://{cfg.bucket}/{raw_key} (cards={len(all_cards)})")
+    logger.info(f"Writing raw payload to s3://{cfg.bucket}/{raw_key} (cards={len(all_cards)})")
     _s3_put_json(s3, cfg.bucket, raw_key, payload)
 
     # Write failed pages manifest if needed
@@ -207,10 +218,10 @@ def run_full_ingestion(cfg: IngestionConfig) -> None:
             "extracted_at_utc": _utc_now_iso(),
             "note": "Pages listed here failed after retries; raw output may be incomplete.",
         }
-        print(f"[WARN] Writing failed pages manifest to s3://{cfg.bucket}/{failed_key}")
+        logger.warning(f"Writing failed pages manifest to s3://{cfg.bucket}/{failed_key}")
         _s3_put_json(s3, cfg.bucket, failed_key, failed_payload)
 
-    print("[INFO] Done.")
+    logger.info("Done.")
 
 def main() -> None:
     bucket = _require_env("S3_BUCKET")
